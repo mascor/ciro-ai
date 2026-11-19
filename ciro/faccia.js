@@ -794,7 +794,8 @@ function disegnaAttese(elenco) {
       for (const [lettera, spiegazione] of opzioni) {
         const pulsante = document.createElement("button");
         pulsante.type = "button";
-        pulsante.textContent = lettera;
+        // come le dice la voce: numeri (le lettere si confondono), sì/no
+        pulsante.textContent = { A: "1", B: "2", C: "3", D: "4", E: "5", S: "Sì", N: "No" }[lettera] || lettera;
         pulsante.title = spiegazione;
         pulsante.addEventListener("click", (evento) => {
           evento.stopPropagation();

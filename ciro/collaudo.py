@@ -19,7 +19,7 @@ from pathlib import Path
 
 import cervello as modulo_cervello
 
-FRASI = ["A", "B", "sì", "no", "B per prova due"]
+FRASI = ["uno", "due", "sì", "no", "uno per prova due"]
 SILENZIO_SECONDI = 5
 PROGETTI_PROVA = ["prova-ciro", "prova-due"]
 ATTESA_FRASE = 20.0
@@ -29,14 +29,14 @@ OPZIONI = {"A": "procedi", "B": "fermati"}
 NUMERI = {"0": "zero", "1": "uno", "2": "due", "3": "tre"}
 STOP_RE = re.compile(r"^(?:basta|ferma|stop|interrompi)(?: la| il)? (?:calibrazione|collaudo|prova)$")
 PROMPT_COMPITI = [
-    "Compito uno: rispondi A alla domanda che arriva.",
-    "Compito due: ora correggi, di' rispondi B.",
-    "Compito tre: arrivano due domande. Rispondi A a prova due e B a prova ciro.",
+    "Primo compito: rispondi uno alla domanda che arriva.",
+    "Secondo compito: ora correggi, di' rispondi due.",
+    "Terzo compito: arrivano due domande. Di' uno per prova due, poi due per prova ciro.",
 ]
 SPIEGAZIONE_COMPITI = [
-    "Rispondi A alla domanda di prova-ciro",
-    "Di' «rispondi B» per correggere",
-    "Rispondi A a prova-due e B a prova-ciro",
+    "Rispondi «uno» alla domanda di prova-ciro",
+    "Di' «rispondi due» per correggere",
+    "Di' «uno per prova due», poi «due per prova ciro»",
 ]
 
 

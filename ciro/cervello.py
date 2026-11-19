@@ -323,6 +323,42 @@ AUTORIZZAZIONE_RE = re.compile(r"^\s*AUTORIZZAZIONE\s*:\s*(togli|elenca)\s*\|\s*
 LETTERA_RE = re.compile(r"^(?:(?:la|risposta|rispondi|rispondo|scelgo|opzione|lettera|ho detto|dico|"
                         r"vai con|metti|e|è)\s+)*([a-z])"
                         r"(?:\s+(?:per|a|ad|al|alla)\s+(.+?))?(?:\s+grazie)?$")
+# A voce le opzioni si chiamano con numeri: in italiano le lettere si confondono
+# (bi, ci, di, gi, pi, vi suonano quasi uguali; misurato sulla voce vera il 19/11)
+NOMI_OPZIONE = {"A": "uno", "B": "due", "C": "tre", "D": "quattro", "E": "cinque", "S": "sì", "N": "no"}
+NUMERI_RISPOSTA = {"uno": "a", "1": "a", "prima": "a", "primo": "a",
+                   "due": "b", "2": "b", "seconda": "b", "secondo": "b",
+                   "tre": "c", "3": "c", "terza": "c", "terzo": "c",
+                   "quattro": "d", "4": "d", "quarta": "d", "quarto": "d",
+                   "cinque": "e", "5": "e", "quinta": "e", "quinto": "e"}
+PAROLE_PRIMA = {"la", "il", "risposta", "rispondi", "rispondo", "scelgo", "opzione", "numero", "lettera",
+                "ho", "detto", "dico", "vai", "con", "metti", "e", "è", "cambia", "correggi", "in"}
+LETTERE_AMBIGUE = set("BCDE")   # dette come lettere si scambiano tra loro
+
+
+def nome_opzione(lettera):
+    return NOMI_OPZIONE.get(lettera, lettera)
+
+
+def elenco_opzioni(opzioni):
+    """«uno, procedi; due, fermati»: come Ciro dice le opzioni."""
+    return "; ".join("%s, %s" % (nome_opzione(l), t) for l, t in opzioni.items())
+
+
+def numeri_in_lettere(detto):
+    """«uno per prova due» -> «a per prova due»: il primo numero (dopo «rispondi»,
+    «ho detto»...) diventa la lettera dell'opzione. Ritorna (testo, era_numero)."""
+    parole = detto.split()
+    for indice, parola in enumerate(parole):
+        if parola in PAROLE_PRIMA:
+            continue
+        if parola in NUMERI_RISPOSTA:
+            parole[indice] = NUMERI_RISPOSTA[parola]
+            return " ".join(parole), True
+        break
+    return detto, False
+
+
 # come whisper scrive a volte una lettera detta da sola
 LETTERE_SENTITE = {"ah": "a", "ahh": "a", "aah": "a", "ha": "a", "à": "a",
                    "bi": "b", "be": "b", "bè": "b", "ci": "c"}
@@ -472,6 +508,7 @@ class Cervello:
         self.annunciate = {}           # ID -> ora in cui Ciro l'ha detta
         self.lettera_sospesa = None    # lettera detta senza progetto, con piu' domande aperte
         self.autorizzazione_in_attesa = None  # scheda di un deploy di prova: «B» da confermare
+        self.conferma_lettera = None   # (scheda, lettera): «Hai detto tre?» su una lettera ambigua
         # cosa ha detto Ciro per ultimo: le risposte brevi («sì», «A», «rispondi B»)
         # vanno solo li'. tipo: domanda, automatica, avviso, proposta, mandato
         self.ultimo_detto = None
@@ -556,7 +593,10 @@ class Cervello:
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
         self.decisioni_mandate[scheda.get("progetto")] = time.time()
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
-        return self._detto(testo_detto, "Mandato.", True)
+        # dice cosa ha capito: se e' sbagliato lo senti subito («annulla» entro 2 minuti)
+        testo_opzione = (scheda.get("opzioni") or {}).get(scelta, "")
+        return self._detto(testo_detto, "Mandato: %s." % ", ".join(
+            x for x in (nome_opzione(scelta), testo_opzione) if x), True)
 
     def _detto(self, testo, risposta, mandato):
         self.storico += [("io", testo), ("faccia", risposta)]
@@ -634,6 +674,8 @@ class Cervello:
         detto = appresi.get(detto) or LETTERE_SENTITE.get(detto, detto)
         if not detto:
             return None
+        detto_parole = detto
+        detto, era_numero = numeri_in_lettere(detto)
         try:
             posta, domande, coordinatore = _moduli_posta()
             with self._lock:
@@ -655,12 +697,22 @@ class Cervello:
                     return self._detto(testo, "Non posso salvarla: %s." % errore, False)
                 esito = self._manda(scheda, scheda["raccomanda"], testo, "regola:%s" % regola["id"])
                 if esito["mandato"]:
-                    esito["risposta"] = "Salvata. Mandato."
+                    esito["risposta"] = "Salvata. " + esito["risposta"]
                 return esito
             if NO_RE.match(detto):
                 self.autorizzazione_in_attesa = None
                 return self._detto(testo, "Va bene, non la salvo. La domanda resta in attesa.", False)
             self.autorizzazione_in_attesa = None
+
+        # «Hai detto tre?» dopo una lettera ambigua: «sì» la manda, il numero la corregge
+        if self.conferma_lettera:
+            scheda, lettera_ambigua = self.conferma_lettera
+            self.conferma_lettera = None
+            if detto in ("si", "sì") or e_conferma(detto):
+                return self._manda(scheda, lettera_ambigua, testo)
+            if NO_RE.match(detto):
+                return self._detto(testo, "Va bene. Dimmi il numero: %s." % elenco_opzioni(
+                    opzioni_per_voce(scheda)), False)
 
         # un messaggio libero aspetta conferma: «sì», «no», «annulla» sono per lui
         if self.azione_in_attesa and (detto in ("si", "sì", "no") or e_conferma(detto) or NO_RE.match(detto)):
@@ -685,7 +737,7 @@ class Cervello:
         elif detto in ("si", "sì", "no"):
             lettera = "no" if detto == "no" else "si"
         if lettera is None:
-            lettera = self._lettera_da_parole(detto)   # «procedi» al posto di «A»
+            lettera = self._lettera_da_parole(detto_parole)   # «procedi» al posto di «A»
         if lettera is None:
             return None
 
@@ -700,7 +752,7 @@ class Cervello:
             scheda = self._progetto_esatto(progetto)
             if scheda is None:
                 return None  # «e alla fine ...»: una frase, non una risposta
-            return self._rispondi_lettera(scheda, lettera, testo)
+            return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero)
 
         if lettera not in ("si", "no") and not any(lettera in opzioni_per_voce(s)
                                                    for s in self.domande_in_attesa.values()):
@@ -711,7 +763,7 @@ class Cervello:
             scheda = next(iter(self.domande_in_attesa.values()))
             # dopo un riavvio Ciro non ha ancora detto nulla: c'e' una sola domanda
             if ultimo == {} or (ultimo.get("tipo") == "domanda" and ultimo.get("id") == scheda["id"]):
-                return self._rispondi_lettera(scheda, lettera, testo)
+                return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero)
         self.lettera_sospesa = lettera
         return self._detto(testo, "Per quale progetto?", False)
 
@@ -749,9 +801,14 @@ class Cervello:
                 return lettera
         return None
 
-    def _rispondi_lettera(self, scheda, lettera, testo):
+    def _rispondi_lettera(self, scheda, lettera, testo, ambigua=False):
         self.lettera_sospesa = None
         opzioni = opzioni_per_voce(scheda)
+        if ambigua and lettera in LETTERE_AMBIGUE and len(opzioni) >= 3 and lettera in opzioni:
+            # una lettera detta da sola con tre o piu' opzioni: B, C, D si scambiano
+            self.conferma_lettera = (scheda, lettera)
+            return self._detto(testo, "Hai detto %s, %s? Di' sì, oppure il numero." % (
+                nome_opzione(lettera), opzioni[lettera]), False)
         if lettera in ("si", "no"):
             if set(opzioni) >= {"S", "N"}:
                 lettera = "S" if lettera == "si" else "N"
@@ -759,15 +816,11 @@ class Cervello:
                 lettera = "A"  # «sì» a un deploy di prova: autorizza questa volta
             elif lettera == "si" and scheda.get("raccomanda") in opzioni:
                 # Ciro ha detto «Consiglia X»: «sì» accetta il consiglio, e lo dice
-                esito = self._manda(scheda, scheda["raccomanda"], testo)
-                if esito["mandato"]:
-                    esito["risposta"] = "Mandato: %s." % scheda["raccomanda"]
-                    self.storico[-1] = ("faccia", esito["risposta"])
-                return esito
+                return self._manda(scheda, scheda["raccomanda"], testo)
             else:
-                return self._detto(testo, "Rispondi con %s." % ", ".join(opzioni), False)
+                return self._detto(testo, "Rispondi con il numero: %s." % elenco_opzioni(opzioni), False)
         if lettera not in opzioni:
-            return self._detto(testo, "Le opzioni sono %s." % ", ".join(opzioni), False)
+            return self._detto(testo, "Le opzioni sono: %s." % elenco_opzioni(opzioni), False)
         if opzioni == OPZIONI_DEPLOY_PROVA and scheda.get("operazione") == "deploy-prova":
             if lettera == "A":
                 return self._manda(scheda, scheda["raccomanda"], testo)
@@ -799,7 +852,8 @@ class Cervello:
         testo = azione.get("testo") or ""
         scelta = (azione.get("scelta") or "").strip().upper()[:1]
         if not scelta:
-            inizio = re.match(r"^\s*(?:la\s+|opzione\s+)?([A-Za-z])(?![A-Za-zàèéìòù])", testo)
+            numero, era_numero = numeri_in_lettere(re.sub(r"[^\w'àèéìòù]+", " ", testo.lower()).strip())
+            inizio = re.match(r"^\s*(?:la\s+|opzione\s+)?([A-Za-z])(?![A-Za-zàèéìòù])", numero if era_numero else testo)
             if inizio:
                 scelta = inizio.group(1).upper()
             elif re.match(r"(?i)^\s*s[iì]\b", testo) and "S" in opzioni:
@@ -823,7 +877,7 @@ class Cervello:
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
         self.decisioni_mandate[scheda.get("progetto")] = time.time()
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
-        return "Mandato a %s." % scheda.get("progetto")
+        return "Mandato a %s: %s, %s." % (scheda.get("progetto"), nome_opzione(scelta), opzioni.get(scelta, ""))
 
     # ------------------------------------------------------------- contesto
     def _carica(self):

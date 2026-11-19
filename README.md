@@ -243,9 +243,13 @@ microphone. Say "Ciro, mi senti?" ("Ciro, can you hear me?").
 
 | You say | Ciro does |
 |---|---|
-| "A" / "la B" / "sì" / "no" | answers the question it just read, in under a second |
-| "B per alpha-bot" | answers that project's question |
-| "annulla" / "rispondi B" (within 2 min) | sends a correction for the answer just given |
+| "uno" / "due" / "tre" (or "A", "la B", "sì", "no") | answers the question it just read, in under a second, and says what it understood ("Mandato: due, fermati") |
+| "due per alpha-bot" | answers that project's question |
+| "annulla" / "rispondi due" (within 2 min) | sends a correction for the answer just given |
+
+Ciro reads the options as numbers ("uno, procedi; due, fermati"): in Italian the letters
+*bi, ci, di, vi* sound alike, while numbers do not. A letter said alone with three or more
+options gets a quick check ("Hai detto tre, …?").
 | "da ora in poi …" ("from now on …") | saves a general rule |
 | "da ora chiedimi sempre prima di pubblicare X" | removes the automatic test-deploy rule for X |
 | "riepilogo ogni ora" / "niente riepiloghi" | changes the summaries |

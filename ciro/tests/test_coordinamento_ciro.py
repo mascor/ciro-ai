@@ -107,8 +107,8 @@ class TestSorveglianza(BaseCiro):
         self.assertEqual(len(voci), 1)
         self.assertEqual(voci[0]["testo"],
                          "Da ironworks: Quale schema uso per gli spazi Chat? "
-                         "A, uno spazio per progetto; B, uno spazio per cliente. "
-                         "Consiglia A. Come rispondo?")
+                         "uno, uno spazio per progetto; due, uno spazio per cliente. "
+                         "Consiglia uno. Come rispondo?")
         self.assertEqual(voci[0]["tipo"], "domanda")
         self.assertEqual(voci[0]["domanda_id"], identificativo)
         self.assertEqual(voci[0]["progetto"], "ironworks")
@@ -276,7 +276,7 @@ class TestRisposteVeloci(BaseCiro):
         inizio = time.time()
         esito = self.c.chiedi("A")
         self.assertLess(time.time() - inizio, 1.0)
-        self.assertEqual(esito["risposta"], "Mandato.")
+        self.assertTrue(esito["risposta"].startswith("Mandato"), esito["risposta"])
         self.assertTrue(esito["mandato"])
         self.assertEqual(self.modello_chiamato, [])
         scheda = domande.leggi(identificativo)
@@ -289,7 +289,7 @@ class TestRisposteVeloci(BaseCiro):
         for detto, lettera in (("la B", "B"), ("B.", "B"), ("rispondi a", "A"), ("Opzione b", "B")):
             identificativo = self.annunciata(oggetto=detto)
             esito = self.c.chiedi(detto)
-            self.assertEqual(esito["risposta"], "Mandato.", detto)
+            self.assertTrue(esito["risposta"].startswith("Mandato"), detto)
             self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], lettera, detto)
         self.assertEqual(self.modello_chiamato, [])
 
@@ -303,12 +303,12 @@ class TestRisposteVeloci(BaseCiro):
         self.assertEqual(domande.leggi(secondo)["stato"], "in-attesa")
         # he names the project: the letter he already said goes there
         esito = self.c.chiedi("ironworks")
-        self.assertEqual(esito["risposta"], "Mandato.")
+        self.assertTrue(esito["risposta"].startswith("Mandato"), esito["risposta"])
         self.assertEqual(domande.leggi(primo)["risposta"]["scelta"], "A")
         self.assertEqual(domande.leggi(secondo)["stato"], "in-attesa")
         # «B per contoso» goes only to contoso
         esito = self.c.chiedi("B per contoso")
-        self.assertEqual(esito["risposta"], "Mandato.")
+        self.assertTrue(esito["risposta"].startswith("Mandato"), esito["risposta"])
         self.assertEqual(domande.leggi(secondo)["risposta"]["scelta"], "B")
         self.assertEqual(self.modello_chiamato, [])
 
@@ -322,28 +322,28 @@ class TestRisposteVeloci(BaseCiro):
 
     def test_si_no_su_domanda_si_no(self):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
-        self.assertEqual(self.c.chiedi("sì")["risposta"], "Mandato.")
+        self.assertTrue(self.c.chiedi("sì")["risposta"].startswith("Mandato"), self.c.chiedi("sì")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "S")
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
-        self.assertEqual(self.c.chiedi("no")["risposta"], "Mandato.")
+        self.assertTrue(self.c.chiedi("no")["risposta"].startswith("Mandato"), self.c.chiedi("no")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "N")
 
     def test_si_accetta_l_opzione_consigliata(self):
         identificativo = self.annunciata(raccomanda="B")
         esito = self.c.chiedi("sì")
-        self.assertEqual(esito["risposta"], "Mandato: B.")
+        self.assertEqual(esito["risposta"], "Mandato: due, uno spazio per cliente.")
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "B")
 
     def test_si_senza_consiglio_chiede_la_lettera(self):
         identificativo = self.annunciata(raccomanda=None)
-        self.assertIn("A, B", self.c.chiedi("sì")["risposta"])
+        self.assertIn("Rispondi con il numero", self.c.chiedi("sì")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
 
     def test_lettera_non_tra_le_opzioni(self):
         identificativo = self.annunciata()
         esito = self.c.chiedi("C")
-        self.assertIn("A", esito["risposta"])
-        self.assertIn("B", esito["risposta"])
+        self.assertIn("uno", esito["risposta"])
+        self.assertIn("due", esito["risposta"])
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
 
     def test_frase_normale_va_al_modello(self):
@@ -356,17 +356,17 @@ class TestRisposteVeloci(BaseCiro):
                          opzioni={"A": "procedi", "B": "aspetta"}, raccomanda="A")
         identificativo = self.annunciata(**argomenti)
         frase = self.coda()[-1]["testo"]
-        self.assertIn("A, autorizza questa volta", frase)
-        self.assertIn("B, autorizza sempre", frase)
-        self.assertIn("C, rimanda", frase)
-        esito = self.c.chiedi("B")
+        self.assertIn("uno, autorizza questa volta", frase)
+        self.assertIn("due, autorizza sempre", frase)
+        self.assertIn("tre, rimanda", frase)
+        esito = self.c.chiedi("due")
         self.assertIn("Salvo:", esito["risposta"])
         self.assertTrue(esito["risposta"].endswith("Confermi?"))
         self.assertEqual(coordinatore.carica_autorizzazioni(), [])
         esito = self.c.chiedi("no")
         self.assertEqual(coordinatore.carica_autorizzazioni(), [])
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
-        esito = self.c.chiedi("B")
+        esito = self.c.chiedi("due")
         esito = self.c.chiedi("sì")
         regole = coordinatore.carica_autorizzazioni()
         self.assertEqual([(r["progetto"], r["condizioni"]) for r in regole], [("ironworks", ["test-ok"])])
@@ -380,10 +380,10 @@ class TestRisposteVeloci(BaseCiro):
         argomenti = dict(operazione="deploy-prova", ambiente="prova", condizioni=["test-ok"],
                          opzioni={"A": "aspetta", "B": "procedi"}, raccomanda="B")
         identificativo = self.annunciata(**argomenti)
-        esito = self.c.chiedi("C")
+        esito = self.c.chiedi("tre")
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
         self.assertFalse(esito["mandato"])
-        self.c.chiedi("A")
+        self.c.chiedi("uno")
         scheda = domande.leggi(identificativo)
         self.assertEqual(scheda["risposta"]["scelta"], "B")  # "this time" = the option that proceeds
         self.assertEqual(coordinatore.carica_autorizzazioni(), [])
@@ -485,6 +485,43 @@ class TestRisposteVeloci(BaseCiro):
             self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], lettera, detto)
         self.assertEqual(self.modello_chiamato, [])
 
+    def test_numeri_al_posto_delle_lettere(self):
+        for detto, lettera in (("due", "B"), ("Uno.", "A"), ("ho detto due", "B"), ("la seconda", "B"), ("2", "B")):
+            identificativo = self.annunciata(oggetto=detto)
+            esito = self.c.chiedi(detto)
+            self.assertTrue(esito["mandato"], (detto, esito))
+            self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], lettera, detto)
+        self.assertEqual(self.modello_chiamato, [])
+
+    def test_numero_e_progetto(self):
+        primo = self.annunciata("ironworks")
+        secondo = self.annunciata("contoso")
+        self.assertTrue(self.c.chiedi("due per contoso")["mandato"])
+        self.assertEqual(domande.leggi(secondo)["risposta"]["scelta"], "B")
+        self.assertEqual(domande.leggi(primo)["stato"], "in-attesa")
+
+    def test_conferma_dice_cosa_ha_capito(self):
+        self.annunciata(opzioni={"A": "procedi", "B": "fermati"})
+        self.assertEqual(self.c.chiedi("due")["risposta"], "Mandato: due, fermati.")
+
+    def test_lettera_ambigua_con_tre_opzioni_chiede_conferma(self):
+        tre = {"A": "procedi", "B": "aspetta", "C": "annulla tutto"}
+        identificativo = self.annunciata(opzioni=tre)
+        esito = self.c.chiedi("C")
+        self.assertEqual(esito["risposta"], "Hai detto tre, annulla tutto? Di' sì, oppure il numero.")
+        self.assertFalse(esito["mandato"])
+        self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
+        self.assertTrue(self.c.chiedi("sì")["mandato"])
+        self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "C")
+        # with the number there is no doubt
+        identificativo = self.annunciata(opzioni=tre, oggetto="Seconda")
+        self.assertTrue(self.c.chiedi("tre")["mandato"])
+        # a wrong letter is corrected with the number
+        identificativo = self.annunciata(opzioni=tre, oggetto="Terza")
+        self.c.chiedi("D" if False else "B")
+        self.assertTrue(self.c.chiedi("uno")["mandato"])
+        self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "A")
+
     def test_ok_non_e_una_risposta(self):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
         for detto in ("ok", "perfetto", "certo"):
@@ -498,7 +535,7 @@ class TestRisposteVeloci(BaseCiro):
         esito = self.c.chiedi("sì")
         self.assertEqual(esito["risposta"], "Per quale progetto?")
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
-        self.assertEqual(self.c.chiedi("ironworks")["risposta"], "Mandato.")
+        self.assertTrue(self.c.chiedi("ironworks")["risposta"].startswith("Mandato"), self.c.chiedi("ironworks")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "S")
 
     def test_rispondi_B_dopo_automatica_corregge_quella(self):
@@ -552,7 +589,7 @@ class TestRisposteVeloci(BaseCiro):
         identificativo = self.annunciata()
         server._cervello = modulo_cervello.Cervello()  # Ciro restarted
         self.c = server._cervello
-        self.assertEqual(self.c.chiedi("A")["risposta"], "Mandato.")
+        self.assertTrue(self.c.chiedi("A")["risposta"].startswith("Mandato"), self.c.chiedi("A")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["stato"], "risposta-consegnata")
 
 

@@ -651,14 +651,16 @@ def frase_domanda(scheda):
     if domanda and domanda[-1] not in "?.!":
         domanda += "."
     dette = modulo_cervello.opzioni_per_voce(scheda)
-    opzioni = "; ".join("%s, %s" % (lettera, _come_scritto(testo)) for lettera, testo in dette.items())
+    # a voce le opzioni sono numeri («uno, procedi; due, fermati»): le lettere si confondono
+    opzioni = "; ".join("%s, %s" % (modulo_cervello.nome_opzione(lettera), _come_scritto(testo))
+                        for lettera, testo in dette.items())
     frase = "Da %s: %s" % (scheda.get("progetto") or "una sessione", domanda)
     if scheda.get("operazione") == "credenziali":
         return frase + " Scrivila nel campo protetto della pagina."
     if opzioni:
         frase += " %s." % opzioni
     if scheda.get("raccomanda") and dette == scheda.get("opzioni"):
-        frase += " Consiglia %s." % scheda["raccomanda"]
+        frase += " Consiglia %s." % modulo_cervello.nome_opzione(scheda["raccomanda"])
     return frase + " Come rispondo?"
 
 
