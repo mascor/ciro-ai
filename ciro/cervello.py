@@ -474,6 +474,8 @@ class Cervello:
         # cosa ha detto Ciro per ultimo: le risposte brevi («sì», «A», «rispondi B»)
         # vanno solo li'. tipo: domanda, automatica, avviso, proposta, mandato
         self.ultimo_detto = None
+        self.collaudo = None          # calibrazione guidata (collaudo.Collaudo), se c'e'
+        self.ultimo_livello = None    # livello del microfono dell'ultima frase (dalla pagina)
         self._carica()
 
     def annota_avviso(self, progetto, frase, domanda=True):
@@ -627,7 +629,8 @@ class Cervello:
         stato altro (un avviso, una proposta da confermare, un'altra domanda),
         Ciro chiede «Per quale progetto?» invece di indovinare."""
         detto = re.sub(r"[^\w'àèéìòù]+", " ", (testo or "").lower()).strip()
-        detto = LETTERE_SENTITE.get(detto, detto)
+        appresi = leggi_impostazioni().get("alias_lettere") or {}   # dalla calibrazione
+        detto = appresi.get(detto) or LETTERE_SENTITE.get(detto, detto)
         if not detto:
             return None
         try:
@@ -960,6 +963,21 @@ class Cervello:
         testo = (testo or "").strip()
         if not testo:
             return {"risposta": "", "azione": None, "mandato": False}
+
+        # calibrazione guidata: «Ciro, calibrati»; mentre misura, le frasi non sono comandi
+        if self.collaudo is not None:
+            detto = re.sub(r"[^\w\s]+", " ", testo.lower()).split()
+            if " ".join(w for w in detto if w != "ciro") in ("calibrati", "calibrazione", "collaudo",
+                                                               "fai la calibrazione", "avvia la calibrazione",
+                                                               "calibrazione guidata"):
+                risposta = self.collaudo.avvia()
+                self.storico += [("io", testo), ("faccia", risposta)]
+                return {"risposta": risposta, "azione": None, "mandato": False,
+                        "comando": "misura-silenzio", "secondi": 10}
+            consumato = self.collaudo.gestisci(testo, self.ultimo_livello)
+            if consumato is not None:
+                self.storico += [("io", testo), ("faccia", consumato["risposta"])]
+                return consumato
 
         # «pausa progetti [tranne X]» / «riprendi i progetti»: subito, senza modello
         comando = self._comando_pausa(testo)

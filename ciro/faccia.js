@@ -374,6 +374,8 @@ let ultimoSuono = 0;
 let inizioDiscorso = 0;
 let rumore = 0.004;
 let rumoreAppreso = 0;    // livello dei falsi allarmi: riscende piano (~3 minuti)
+let sogliaCalibrata = null; // dalla calibrazione guidata («Ciro, calibrati»)
+let misurando = null;       // campioni del silenzio mentre la calibrazione lo misura
 let attesaInvio = false;
 let filaForte = 0;        // fotogrammi di fila sopra la soglia (128 ms l'uno)
 let voceVera = false;     // nel discorso c'e' un suono continuo, non solo clic
@@ -428,7 +430,11 @@ function esaminaMicrofono(dati) {
 
   livelloMicrofono += (Math.min(1, rms * 6) - livelloMicrofono) * 0.35;
   rumoreAppreso *= 0.9995; // circa 8 fotogrammi al secondo
-  const soglia = Math.max(0.011, rumore * 3, rumoreAppreso * 3);
+  if (misurando) { // calibrazione: misuro il silenzio, non ascolto frasi
+    misurando.push(rms);
+    return;
+  }
+  const soglia = Math.max(sogliaCalibrata || 0.011, rumore * 3, rumoreAppreso * 3);
 
   if (!parlando && rms < soglia) {
     rumore = rumore * 0.98 + rms * 0.02; // impara il rumore di fondo
@@ -548,12 +554,12 @@ async function inviaDiscorso(pezzi) {
     });
     if (!risposta.ok) throw new Error("trascrizione fallita");
     const { testo } = await risposta.json();
+    let somma = 0;
+    for (const pezzo of pezzi) for (let i = 0; i < pezzo.length; i++) somma += pezzo[i] * pezzo[i];
+    const livello = Math.sqrt(somma / campioni);
     if (!testo || !testo.trim()) { // anche una lettera sola («a») e' una risposta
       // falso allarme: era rumore. La soglia sale al livello di quel rumore
       // (e riscende da sola quando la stanza torna silenziosa)
-      let somma = 0;
-      for (const pezzo of pezzi) for (let i = 0; i < pezzo.length; i++) somma += pezzo[i] * pezzo[i];
-      const livello = Math.sqrt(somma / campioni);
       const prima = rumoreAppreso;
       rumoreAppreso = Math.min(0.012, Math.max(rumoreAppreso, livello * 0.6));
       if (rumoreAppreso > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumoreAppreso.toFixed(4));
@@ -563,7 +569,7 @@ async function inviaDiscorso(pezzi) {
     aggiungiMessaggio("io", testo);
     impostaFase("ascolto");
     segnalaAttivita();
-    await chiediAlCervello(testo);
+    await chiediAlCervello(testo, livello);
   } catch (errore) {
     console.warn(errore);
     evento("errore-ascolto", errore && errore.message);
@@ -573,13 +579,13 @@ async function inviaDiscorso(pezzi) {
 }
 
 // Il cervello: OpenCode con il quadro delle sessioni e della posta.
-async function chiediAlCervello(testo) {
+async function chiediAlCervello(testo, livello) {
   impostaFase("penso");
   try {
     const risposta = await fetch("/api/cervello", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ testo }),
+      body: JSON.stringify({ testo, livello: livello || null }),
     });
     if (!risposta.ok) throw new Error("cervello non disponibile");
     const dato = await risposta.json();
@@ -591,6 +597,7 @@ async function chiediAlCervello(testo) {
     }
     aggiungiMessaggio("lui", frase);
     di(frase);
+    eseguiComando(dato);
     aggiornaQuadro();
   } catch (errore) {
     console.warn(errore);
@@ -900,6 +907,8 @@ pulsantePausa.addEventListener("click", async () => {
 
 function disegnaQuadro(dati) {
   disegnaPausa(dati.pausa);
+  const calibrata = dati.microfono && Number(dati.microfono.soglia);
+  if (calibrata > 0) sogliaCalibrata = calibrata;
   disegnaConsumi(dati.consumi || []);
   disegnaAttese(dati.attese || []);
   disegnaSessioni(dati.sessioni || []);
@@ -1093,6 +1102,43 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", aggiornaQuadro);
 aggiornaQuadro();
 
+// ------------------------------------------- calibrazione guidata
+// «Ciro, calibrati»: il server chiede di misurare il silenzio dopo aver parlato.
+function eseguiComando(dato) {
+  if (dato && dato.comando === "misura-silenzio") misuraSilenzio(Number(dato.secondi) || 10);
+}
+
+async function misuraSilenzio(secondi) {
+  // aspetto che Ciro finisca di parlare (e la sua eco si spenga)
+  while (inCorso || coda.length) await new Promise((r) => setTimeout(r, 200));
+  await new Promise((r) => setTimeout(r, 600));
+  misurando = [];
+  stato.textContent = "Misuro il silenzio…";
+  await new Promise((r) => setTimeout(r, secondi * 1000));
+  const campioni = misurando.slice().sort((a, b) => a - b);
+  misurando = null;
+  impostaFase(micAttivo ? "ascolto" : "pronto");
+  if (!campioni.length) return;
+  const medio = campioni.reduce((a, b) => a + b, 0) / campioni.length;
+  const p95 = campioni[Math.min(campioni.length - 1, Math.floor(campioni.length * 0.95))];
+  const massimo = campioni[campioni.length - 1];
+  try {
+    const risposta = await fetch("/api/collaudo", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo: "silenzio", medio, p95, massimo }),
+    });
+    const dato = await risposta.json();
+    sogliaCalibrata = null; // la nuova arriva con il quadro
+    aggiornaQuadro();
+    if (dato.risposta) {
+      aggiungiMessaggio("lui", dato.risposta);
+      di(dato.risposta);
+    }
+  } catch (errore) {
+    evento("errore-collaudo", errore && errore.message);
+  }
+}
+
 // ------------------------------------------------- messaggi spinti da fuori
 async function controllaMessaggi() {
   if (!sveglia) return; // se dorme restano in coda e li dice quando si sveglia
@@ -1109,6 +1155,7 @@ async function controllaMessaggi() {
       }
       aggiungiMessaggio("lui", messaggio.testo);
       di(messaggio.testo);
+      eseguiComando(messaggio);
     }
   } catch (errore) {
     /* server non raggiungibile: riprovo al giro dopo */

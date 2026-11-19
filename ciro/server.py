@@ -791,6 +791,32 @@ def salva_credenziale(domanda_id, nome, valore):
     return servizio
 
 
+# ------------------------------------------------------ calibrazione guidata
+import collaudo as modulo_collaudo  # noqa: E402
+
+_collaudo = modulo_collaudo.Collaudo(
+    dire=lambda frase, **extra: _in_coda({"testo": frase, "da": "collaudo", **extra}),
+    stato_pausa=stato_pausa, imposta_pausa=imposta_pausa,
+    cartella=CONFIG_FACCIA / "collaudi",
+    righe_registro=lambda dal: _righe_registro(dal))
+_cervello.collaudo = _collaudo
+
+
+def _righe_registro(dal):
+    righe = []
+    try:
+        for riga in modulo_cervello.REGISTRO.read_text(encoding="utf-8").splitlines()[-3000:]:
+            try:
+                voce = json.loads(riga)
+            except ValueError:
+                continue
+            if voce.get("ora", "") >= dal:
+                righe.append(voce)
+    except OSError:
+        pass
+    return righe
+
+
 # ---------------------------------------------------------------- riepilogo
 # Ogni 30 minuti (impostabile a voce), solo se ci sono novita': sessioni
 # ripartite o domande risolte, risposte date dalle sue regole, domande che
@@ -866,6 +892,7 @@ def sorveglia_domande(ferma=None):
     while not ferma.is_set():
         try:
             giro_domande()
+            _collaudo.tick()
             riepilogo_se_serve()
             ripresa = frase_ripresa()
             if ripresa:
@@ -962,7 +989,8 @@ def quadro():
     """Dati per i pannelli: consumi, chi ti aspetta e le sessioni aperte."""
     sessioni = modulo_cervello.leggi_sessioni() or []
     return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni),
-            "pausa": stato_pausa()}
+            "pausa": stato_pausa(), "collaudo": _collaudo.fase,
+            "microfono": {"soglia": modulo_cervello.leggi_impostazioni().get("soglia_microfono")}}
 
 
 
@@ -1093,6 +1121,20 @@ class Gestore(BaseHTTPRequestHandler):
             elif percorso == "/api/consumi":
                 salva_consumo(json.loads(corpo or b"{}"))
                 self._invia(200, json.dumps({"ok": True}))
+            elif percorso == "/api/collaudo":
+                dato = json.loads(corpo or b"{}")
+                with _cervello_lock:
+                    if dato.get("azione") == "avvia":
+                        esito = {"risposta": _collaudo.avvia(), "comando": "misura-silenzio", "secondi": 10}
+                    elif dato.get("tipo") == "silenzio":
+                        esito = {"risposta": _collaudo.silenzio(dato.get("medio") or 0, dato.get("p95") or 0,
+                                                                dato.get("massimo") or 0)}
+                        registra("collaudo-silenzio", **{k: dato.get(k) for k in ("medio", "p95", "massimo")})
+                    elif dato.get("azione") == "ferma":
+                        esito = {"risposta": _collaudo.ferma()}
+                    else:
+                        esito = {"risposta": "", "fase": _collaudo.fase}
+                self._invia(200, json.dumps(esito, ensure_ascii=False))
             elif percorso == "/api/pausa":
                 dato = json.loads(corpo or b"{}")
                 self._invia(200, json.dumps(imposta_pausa(dato.get("attiva"), dato.get("solo"))))
@@ -1115,6 +1157,7 @@ class Gestore(BaseHTTPRequestHandler):
                     self._errore(400, "testo vuoto")
                     return
                 with _cervello_lock:
+                    _cervello.ultimo_livello = dato.get("livello")
                     esito = _cervello.chiedi(testo)
                 self._invia(200, json.dumps(esito, ensure_ascii=False))
             else:
