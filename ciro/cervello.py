@@ -352,7 +352,11 @@ def _norma(testo):
 
 # Impostazioni cambiate a voce («riepilogo ogni ora», «niente riepiloghi»)
 IMPOSTAZIONI = Path(os.environ.get("FACCIA_IMPOSTAZIONI") or (Path.home() / ".config/faccia/impostazioni.json"))
-IMPOSTAZIONI_PREDEFINITE = {"riepilogo": 30}   # minuti; 0 = spento
+IMPOSTAZIONI_PREDEFINITE = {"riepilogo": 30,          # minuti; 0 = spento
+                            "pausa_progetti": False,  # niente annunci delle sessioni...
+                            "solo_progetti": []}      # ...tranne questi
+PAUSA_RE = re.compile(r"^(?:metti in |metti |attiva la )?pausa (?:ai |i |sui |dei )?progetti(?: tranne (.+))?$")
+RIPRESA_RE = re.compile(r"^(?:riprendi|riattiva|togli la pausa)(?: (?:ai |i |dei )?progetti)?$")
 IMPOSTA_RE = re.compile(r"^\s*IMPOSTA\s*:\s*(riepilogo)\s*\|\s*(\d{1,4})", re.IGNORECASE)
 
 
@@ -700,6 +704,26 @@ class Cervello:
         self.lettera_sospesa = lettera
         return self._detto(testo, "Per quale progetto?", False)
 
+    def _comando_pausa(self, testo):
+        detto = re.sub(r"[^\w\s'-]+", " ", (testo or "").lower())
+        detto = re.sub(r"\s+", " ", detto).strip()
+        pausa = PAUSA_RE.match(detto)
+        if pausa:
+            permessi = []
+            for nome in re.split(r",| e ", pausa.group(1) or ""):
+                nome = nome.strip()
+                if nome:
+                    permessi.append(trova_casella(nome) or nome)
+            imposta("pausa_progetti", True)
+            imposta("solo_progetti", permessi)
+            risposta = "Progetti in pausa" + (", tranne %s." % " e ".join(permessi) if permessi else ".")
+            return self._detto(testo, risposta, False)
+        if RIPRESA_RE.match(detto):
+            imposta("pausa_progetti", False)
+            imposta("solo_progetti", [])
+            return self._detto(testo, "Progetti ripresi.", False)
+        return None
+
     def _rispondi_lettera(self, scheda, lettera, testo):
         self.lettera_sospesa = None
         opzioni = opzioni_per_voce(scheda)
@@ -924,6 +948,11 @@ class Cervello:
         testo = (testo or "").strip()
         if not testo:
             return {"risposta": "", "azione": None, "mandato": False}
+
+        # «pausa progetti [tranne X]» / «riprendi i progetti»: subito, senza modello
+        comando = self._comando_pausa(testo)
+        if comando is not None:
+            return comando
 
         # risposta a una domanda strutturata: parte subito, senza modello
         veloce = self.risposta_veloce(testo)

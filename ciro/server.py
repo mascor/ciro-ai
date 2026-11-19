@@ -497,6 +497,9 @@ def giro_avvisi():
         if voce.get("a_voce") is False:
             continue  # una riga di attesa, non una domanda: resta solo nel pannello
         progetto = voce.get("progetto")
+        if in_pausa(progetto):
+            _in_pausa.append(progetto)
+            continue
         if time.time() - _ultimo_avviso.get(progetto, 0) < 90:
             continue  # stessa sessione appena annunciata (sessione e posta insieme)
         _ultimo_avviso[progetto] = time.time()
@@ -613,6 +616,40 @@ def frase_domanda(scheda):
     return frase + " Come rispondo?"
 
 
+# -------------------------------------------------------- pausa progetti
+# Durante i test (o quando vuoi concentrarti) Ciro non annuncia le sessioni,
+# tranne i progetti permessi; le domande restano nel pannello e alla ripresa
+# Ciro dice in una frase cosa e' arrivato.
+_in_pausa = []   # progetti di cui non ha detto le domande durante la pausa
+
+
+def stato_pausa():
+    impostazioni = modulo_cervello.leggi_impostazioni()
+    return {"attiva": bool(impostazioni.get("pausa_progetti")),
+            "solo": list(impostazioni.get("solo_progetti") or [])}
+
+
+def in_pausa(progetto):
+    stato = stato_pausa()
+    return stato["attiva"] and progetto not in stato["solo"]
+
+
+def imposta_pausa(attiva, solo=None):
+    modulo_cervello.imposta("pausa_progetti", bool(attiva))
+    modulo_cervello.imposta("solo_progetti", [str(p) for p in (solo or []) if str(p).strip()][:10])
+    registra("pausa-progetti", attiva=bool(attiva), solo=solo or [])
+    return stato_pausa()
+
+
+def frase_ripresa():
+    if stato_pausa()["attiva"] or not _in_pausa:
+        return ""
+    progetti = list(_in_pausa)
+    _in_pausa.clear()
+    return ("Durante la pausa sono arrivate %d domande: da %s. Le trovi a sinistra."
+            % (len(progetti), _elenco(progetti)))
+
+
 def _in_coda(voce):
     voce.setdefault("quando", time.time())
     with _coda_lock:
@@ -625,6 +662,10 @@ def _metti_in_attesa(scheda):
         scheda = domande.passa(scheda["id"], "in-attesa", "ciro", "detta a voce")
     except (domande.PassaggioNonAmmesso, domande.SchedaNonTrovata):
         return  # nel frattempo e' cambiata (annullata dalla sessione)
+    if in_pausa(scheda.get("progetto")):
+        _in_pausa.append(scheda.get("progetto"))
+        registra("domanda-in-pausa", domanda_id=scheda["id"])
+        return  # resta nel pannello, la dira' il riassunto alla ripresa
     frase = frase_domanda(scheda)
     _in_coda({"testo": frase, "da": "domande", "tipo": "domanda", "progetto": scheda.get("progetto"),
               "domanda_id": scheda["id"], "opzioni": modulo_cervello.opzioni_per_voce(scheda),
@@ -643,6 +684,10 @@ def _consegna_automatica(scheda, esito):
         registra("errore-domande", domanda_id=scheda["id"], errore=repr(errore)[:300])
         _in_coda({"testo": "Non riesco a consegnare la risposta a %s." % scheda.get("progetto"),
                   "da": "domande"})
+        return
+    if in_pausa(scheda.get("progetto")):
+        registra("risposta-automatica", domanda_id=scheda["id"], scelta=esito["scelta"],
+                 regola=esito.get("regola"), in_pausa=True)
         return
     frase = "Ho risposto %s a %s, per la tua regola: %s." % (
         esito["scelta"], scheda.get("progetto"), _testo_parlabile(esito.get("motivo") or ""))
@@ -772,7 +817,7 @@ def riepilogo_se_serve(adesso=None):
     """La frase del riepilogo, se e' ora e ci sono novita' (e la mette in coda)."""
     adesso = time.time() if adesso is None else adesso
     minuti = int(modulo_cervello.leggi_impostazioni().get("riepilogo") or 0)
-    if minuti <= 0 or adesso - _riepilogo["ultimo"] < minuti * 60:
+    if minuti <= 0 or stato_pausa()["attiva"] or adesso - _riepilogo["ultimo"] < minuti * 60:
         return None
     _riepilogo["ultimo"] = adesso
     ripartiti, risolti, automatiche, ferme = [], [], 0, []
@@ -822,6 +867,9 @@ def sorveglia_domande(ferma=None):
         try:
             giro_domande()
             riepilogo_se_serve()
+            ripresa = frase_ripresa()
+            if ripresa:
+                _in_coda({"testo": ripresa, "da": "ripresa"})
         except Exception as errore:  # noqa: BLE001
             registra("errore-domande", errore=repr(errore)[:300])
         ferma.wait(INTERVALLO_DOMANDE)
@@ -913,7 +961,8 @@ def schede_sessioni(sessioni, repo_di=repo_di):
 def quadro():
     """Dati per i pannelli: consumi, chi ti aspetta e le sessioni aperte."""
     sessioni = modulo_cervello.leggi_sessioni() or []
-    return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni)}
+    return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni),
+            "pausa": stato_pausa()}
 
 
 
@@ -1044,6 +1093,9 @@ class Gestore(BaseHTTPRequestHandler):
             elif percorso == "/api/consumi":
                 salva_consumo(json.loads(corpo or b"{}"))
                 self._invia(200, json.dumps({"ok": True}))
+            elif percorso == "/api/pausa":
+                dato = json.loads(corpo or b"{}")
+                self._invia(200, json.dumps(imposta_pausa(dato.get("attiva"), dato.get("solo"))))
             elif percorso == "/api/credenziale":
                 dato = json.loads(corpo or b"{}")
                 try:

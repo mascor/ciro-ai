@@ -876,7 +876,28 @@ function adattaSessioni() {
 }
 window.addEventListener("resize", adattaSessioni);
 
+// pausa progetti: Ciro non annuncia le sessioni (tranne i progetti permessi)
+const pulsantePausa = document.getElementById("pausa-progetti");
+function disegnaPausa(pausa) {
+  const attiva = Boolean(pausa && pausa.attiva);
+  pulsantePausa.classList.toggle("attiva", attiva);
+  pulsantePausa.setAttribute("aria-pressed", String(attiva));
+  const tranne = attiva && pausa.solo && pausa.solo.length ? " tranne " + pausa.solo.join(", ") : "";
+  pulsantePausa.textContent = attiva ? "Progetti in pausa" + tranne : "Progetti attivi";
+}
+pulsantePausa.addEventListener("click", async () => {
+  const attiva = !pulsantePausa.classList.contains("attiva");
+  try {
+    const risposta = await fetch("/api/pausa", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attiva, solo: [] }),
+    });
+    if (risposta.ok) disegnaPausa(await risposta.json());
+  } catch (errore) { /* riprovo al prossimo clic */ }
+});
+
 function disegnaQuadro(dati) {
+  disegnaPausa(dati.pausa);
   disegnaConsumi(dati.consumi || []);
   disegnaAttese(dati.attese || []);
   disegnaSessioni(dati.sessioni || []);

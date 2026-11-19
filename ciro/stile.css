@@ -277,6 +277,28 @@ html, body {
   margin-left: -.6em;
   padding-left: calc(.6em - 3px);
 }
+/* pausa progetti: accanto all'interruttore */
+#pausa-progetti {
+  position: absolute;
+  top: 20px;
+  right: 140px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .12);
+  color: var(--testo-tenue);
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 22;
+}
+#pausa-progetti.attiva {
+  background: rgba(244, 185, 66, .16);
+  border-color: rgba(244, 185, 66, .6);
+  color: #f4b942;
+}
+
 /* pulsanti A/B/C sulle domande strutturate in "Ti aspettano" */
 #pannello-attese .opzioni { display: flex; gap: 8px; margin-top: 8px; }
 #pannello-attese .opzioni button {
