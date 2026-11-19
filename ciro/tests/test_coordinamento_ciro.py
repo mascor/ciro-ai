@@ -431,11 +431,10 @@ class TestRisposteVeloci(BaseCiro):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
         self.uscita_modello = ("Va bene. AZIONE: invia | a=ironworks | tipo=decisione | "
                                "oggetto=Risposta | testo=Sì, ma solo in locale")
+        # a clear answer to an open structured question leaves at once: no «Confermi?»
         esito = self.c.chiedi("sì, ma solo in locale")
-        self.assertTrue(esito["risposta"].endswith("Confermi?"), esito["risposta"])
-        self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
-        esito = self.c.chiedi("sì")
         self.assertTrue(esito["mandato"], esito)
+        self.assertNotIn("Confermi", esito["risposta"])
         self.assertIsNone(self.c.azione_in_attesa)
         messaggi = self.messaggi_a("ironworks")
         self.assertEqual(len(messaggi), 1)
@@ -447,8 +446,7 @@ class TestRisposteVeloci(BaseCiro):
         identificativo = self.annunciata()
         self.uscita_modello = ("AZIONE: invia | a=ironworks | tipo=decisione | oggetto=Risposta | "
                                "scelta=B | testo=B, ma prima fai i test")
-        self.c.chiedi("B, ma prima fai i test")
-        self.c.chiedi("sì")
+        self.assertTrue(self.c.chiedi("B, ma prima fai i test")["mandato"])
         messaggi = self.messaggi_a("ironworks")
         self.assertEqual(len(messaggi), 1)
         testa = posta.leggi_intestazioni(messaggi[0])
@@ -458,6 +456,24 @@ class TestRisposteVeloci(BaseCiro):
         # a second answer is refused by the record: the session cannot act twice
         self.assertEqual(self.c.chiedi("A")["mandato"], False)
         self.assertEqual(len(self.messaggi_a("ironworks")), 1)
+
+    def test_lettera_dentro_frasi_brevi(self):
+        for detto, lettera in (("Ho detto A.", "A"), ("dico B", "B"), ("rispondo a", "A"),
+                               ("la risposta è B", "B"), ("A, grazie", "A"), ("Ah.", "A"), ("Bi", "B")):
+            identificativo = self.annunciata(oggetto=detto)
+            esito = self.c.chiedi(detto)
+            self.assertTrue(esito["mandato"], (detto, esito))
+            self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], lettera, detto)
+        self.assertEqual(self.modello_chiamato, [])
+
+    def test_lettera_non_chiara_chiede_conferma_della_lettera(self):
+        identificativo = self.annunciata()
+        self.uscita_modello = ("AZIONE: invia | a=ironworks | tipo=decisione | oggetto=Risposta | "
+                               "testo=fai come pensi sia meglio")
+        esito = self.c.chiedi("fai come pensi sia meglio")
+        self.assertFalse(esito["mandato"])
+        self.assertIn("lettera", esito["risposta"])
+        self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
 
     def test_ok_non_e_una_risposta(self):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
