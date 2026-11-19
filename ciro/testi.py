@@ -156,6 +156,8 @@ EN = {
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
     "Messaggi non letti": "Unread messages",
+    "La %s è un messaggio di Chat: per toglierlo di' «letto il %s».":
+        "Number %s is a Chat message: to remove it say «read %s».",
     "Scheda di Chat chiusa": "Chat tab closed",
     "Da %d min non arriva niente da questo profilo: riapri la scheda di Google Chat.":
         "Nothing from this profile for %d min: reopen the Google Chat tab.",

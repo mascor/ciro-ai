@@ -62,7 +62,7 @@ class TestChat(BaseCiro):
         server.giro_avvisi()
         detti = [v["testo"] for v in self.coda()]
         self.assertEqual(len(detti), 1, detti)
-        self.assertTrue(detti[0].startswith("Messaggio uno, da Luca Bianchi:"), detti[0])
+        self.assertTrue(detti[0].startswith("Messaggio undici, da Luca Bianchi:"), detti[0])
         self.assertIn("preventivo", detti[0])
 
     def test_spazio_solo_pannello_senza_modello(self):
@@ -119,7 +119,7 @@ class TestChat(BaseCiro):
     def test_letto_il_numero_chiude(self):
         self.arriva(DIRETTA)
         server.attese()                                  # numbers assigned
-        esito = server._cervello.chiedi("letto il uno")
+        esito = server._cervello.chiedi("letto l'undici")
         self.assertEqual(esito["risposta"], "Va bene.")
         self.assertEqual(self.chat_in_attesa(), [])
 
@@ -142,7 +142,7 @@ class TestChat(BaseCiro):
         self.assertEqual(len(self.coda()), 1)
         server.giro_chat(adesso=adesso + 901)            # 15 minutes: reminder
         self.assertEqual(len(self.coda()), 2)
-        self.assertTrue(self.coda()[-1]["testo"].startswith("Ti ricordo il messaggio uno, da Luca Bianchi"),
+        self.assertTrue(self.coda()[-1]["testo"].startswith("Ti ricordo il messaggio undici, da Luca Bianchi"),
                         self.coda()[-1]["testo"])
 
     def test_tre_account_separati(self):

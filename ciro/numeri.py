@@ -17,12 +17,17 @@ from pathlib import Path
 RIPOSO = 5 * 60            # seconds a freed number is not given to another question
 LIBERATI = "~liberati"     # key, in the file, of the recently freed numbers
 
-PAROLE_IT = ["zero", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci"]
-PAROLE_EN = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+PAROLE_IT = ["zero", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove", "dieci",
+             "undici", "dodici", "tredici", "quattordici", "quindici", "sedici", "diciassette", "diciotto",
+             "diciannove", "venti"]
+PAROLE_EN = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+             "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
+             "nineteen", "twenty"]
 # how the user says a question number (Italian and English, words or digits)
 DETTI = {parola: n for n, parola in enumerate(PAROLE_IT) if n}
 DETTI.update({parola: n for n, parola in enumerate(PAROLE_EN) if n})
 DETTI.update({"una": 1, "un": 1, "to": 2, "too": 2, "for": 4})
+PRIMO_CHAT = 11   # numbers 1-10 stay for the sessions' questions
 DETTI.update({str(n): n for n in range(1, 100)})
 
 
@@ -72,7 +77,8 @@ class Numeri:
                     voce = {k: v for k, v in liberati.pop(tornata).items() if k not in ("t", "chiave")}
                 else:
                     usati = {v.get("numero") for v in dati.values()} | {int(k) for k in liberati}
-                    libero = next(n for n in range(1, len(usati) + 2) if n not in usati)
+                    primo = PRIMO_CHAT if str(chiave).startswith("chat|") else 1
+                    libero = next(n for n in range(primo, primo + len(usati) + 2) if n not in usati)
                     voce = {"numero": libero}
             voce.update({k: v for k, v in info.items() if v is not None})
             for k, v in (predefinite or {}).items():

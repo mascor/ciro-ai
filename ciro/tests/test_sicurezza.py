@@ -152,6 +152,15 @@ class TestRisposteSicure(BaseRisposte):
         self.assertTrue(esito["mandato"], esito)
         self.assertEqual(len(self.messaggi_a("contoso")), 1)
 
+    def test_risposta_alla_domanda_appena_letta_parte_subito(self):
+        # 19/11/2026: «sì» detto due volte; la domanda era l'ultima letta da Ciro
+        self.c.annota_avviso("atlas", "Atlas chiede: pubblico?")
+        self.c.annota_avviso("contoso", "Contoso chiede: procedo?")   # read last
+        self.uscita_modello = "AZIONE: invia | a=contoso | tipo=decisione | oggetto=Risposta | testo=Sì"
+        esito = self.c.chiedi("sì")
+        self.assertTrue(esito["mandato"], esito)
+        self.assertEqual(len(self.messaggi_a("contoso")), 1)
+
     def test_messaggio_da_confermare_si_legge_tutto(self):
         testo = "fai il backup del database e poi " + "controlla i log di ogni servizio, " * 4
         self.uscita_modello = "AZIONE: invia | a=contoso | tipo=richiesta | oggetto=x | testo=%s" % testo
@@ -206,6 +215,15 @@ class TestChatSicura(BaseRisposte):
         self.assertIn("ricarica la scheda", righe[0]["testo"])
         self.arriva([], account="home@example.com")                 # read again: zero messages
         self.assertEqual(self.lettura_non_riuscita(), [])
+
+    def test_chat_numerata_da_undici_e_mai_una_risposta(self):
+        self.arriva([DIRETTA])
+        voce = [v for v in server.attese() if v.get("tipo") == "chat"][0]
+        self.assertEqual(voce["numero"], 11)
+        esito = self.c.chiedi("undici, sì")
+        self.assertFalse(esito["mandato"])
+        self.assertIn("messaggio di Chat", esito["risposta"])
+        self.assertEqual(self.messaggi_a("chat"), [])
 
     def test_profilo_che_tace_non_mostra_messaggi_vecchi(self):
         self.arriva([DIRETTA])

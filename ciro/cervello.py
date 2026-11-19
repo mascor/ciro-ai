@@ -953,7 +953,7 @@ class Cervello:
         parole = detto.split()
         # «letto il tre», «ok il tre»: un messaggio di Chat esce dal pannello
         if len(parole) >= 2 and parole[0] in ("letto", "letta", "visto", "ok", "read", "seen"):
-            resto = [p for p in parole[1:] if p not in ("il", "la", "lo", "messaggio", "the", "message")]
+            resto = [re.sub(r"^l'", "", p) for p in parole[1:] if p not in ("il", "la", "lo", "messaggio", "the", "message")]
             numero = modulo_numeri.DETTI.get(resto[0]) if len(resto) == 1 else None
             voce = self.numeri.cerca(numero) if numero else None
             if voce and str(voce.get("chiave", "")).startswith("chat|") and self.chiudi_chat:
@@ -1013,6 +1013,11 @@ class Cervello:
         return t("Non c'è una domanda %s. %s") % (modulo_numeri.parola(numero, lingua()), self._quale_domanda())
 
     def _rispondi_numerata(self, voce, lettera, testo, detto):
+        if str(voce.get("chiave", "")).startswith("chat|"):
+            # un messaggio di Google Chat non si «risponde» per numero: mai una decisione a «chat»
+            return self._detto(testo, t("La %s è un messaggio di Chat: per toglierlo di' «letto il %s».") % (
+                modulo_numeri.parola(voce["numero"], lingua()), modulo_numeri.parola(voce["numero"], lingua())),
+                False)
         if not voce.get("detta"):
             # una risposta va solo a una domanda che l'utente ha sentito: prima la dico
             self.numeri.segna_detta(voce["chiave"])
@@ -1551,8 +1556,11 @@ class Cervello:
                 esito = self._invia(azione)
                 self.storico.append(("faccia", esito))
                 return {"risposta": esito, "azione": azione, "mandato": esito.startswith(t("Mandato"))}
+            ultimo = self.ultimo_detto or {}
+            appena_letta = (ultimo.get("tipo") == "avviso" and ultimo.get("id") == casella
+                            and time.time() - ultimo.get("ora", 0) <= CORREZIONE_SECONDI)
             if (casella and azione["tipo"] == "decisione" and casella in self.domande_aperte
-                    and (len(self.domande_aperte) == 1 or self._nomina(casella, testo))):
+                    and (len(self.domande_aperte) == 1 or self._nomina(casella, testo) or appena_letta)):
                 # risposta a una domanda che Ciro gli ha appena riportato: parte subito,
                 # con le sue parole (non quelle del modello)
                 self.domande_aperte.pop(casella, None)
