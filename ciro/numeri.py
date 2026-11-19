@@ -1,6 +1,6 @@
 """Numbers of the open questions: «domanda tre» instead of a project name.
 
-Whisper understands numbers far better than project names ("alpha" -> "action").
+Whisper understands numbers far better than project names ("alpha" -> "alfa").
 Every open question (structured question, mail asking for a decision, session
 waiting for the user) gets the lowest free number from 1; the number stays the
 same until the question is closed, then it is free again. Stored next to Ciro's

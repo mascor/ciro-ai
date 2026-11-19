@@ -15,6 +15,7 @@ Results and timings (from ~/.config/faccia/conversazioni.log) go to the report.
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -212,7 +213,7 @@ def main(argv=None):
     cervello = [v.get("secondi") for v in righe if v.get("tipo") == "cervello"]
     voce = [v.get("secondi_voce") for v in righe if v.get("tipo") == "parla" and v.get("secondi_voce")]
     scartate = sum(1 for v in righe if v.get("tipo") == "ascolto-scartato")
-    testo = ["PROGETTO: CIRO AI", "DESTINATARIO: l'utente",
+    testo = ["PROGETTO: CIRO AI", "DESTINATARIO: " + (os.environ.get("CIRO_UTENTE") or "l'utente"),
              "MITTENTE: prova_guidata.py (Claude Code, progetto ciro-ai), " + fine[:10],
              "DOVE INCOLLARLO: niente da incollare: e' il rapporto della prova a voce",
              "MOTIVO: esiti e tempi della prova guidata di Ciro", "",
