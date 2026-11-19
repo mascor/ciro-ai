@@ -155,6 +155,17 @@ EN = {
     "Il messaggio è troppo lungo per leggertelo. Dimmelo più corto.":
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
+    # «cosa mi sono perso?»
+    "Non riesco a fare il punto: %s": "I can't catch you up: %s",
+    "una domanda nuova da %s": "one new question from %s",
+    "%d domande nuove da %s": "%d new questions from %s",
+    "Dalle %s: %s.": "Since %s: %s.",
+    "Ti aspettano: %s.": "Waiting for you: %s.",
+    "; e altre %d": "; and %d more",
+    "In Chat, un messaggio urgente.": "In Chat, one urgent message.",
+    "In Chat, %d messaggi urgenti.": "In Chat, %d urgent messages.",
+    "Niente di nuovo dalle %s, e nessuno ti aspetta.": "Nothing new since %s, and nobody is waiting for you.",
+    "Niente di nuovo dalle %s.": "Nothing new since %s.",
     "Non riesco a leggere i messaggi non letti: ricarica la scheda di Google Chat.":
         "I can't read the unread messages: reload the Google Chat tab.",
 }

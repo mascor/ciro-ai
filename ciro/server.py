@@ -64,6 +64,7 @@ _coda = []            # messaggi da far dire alla faccia
 _coda_lock = threading.Lock()
 _cervello = modulo_cervello.Cervello()
 _cervello.chiudi_chat = lambda chiave: _chat.chiudi(chiave)
+_cervello.riassunto_perso = lambda dal: frase_perso(dal)
 _cervello_lock = threading.Lock()
 _kokoro = None
 _kokoro_lock = threading.Lock()
@@ -1231,6 +1232,60 @@ def riepilogo_se_serve(adesso=None):
     frase = " ".join(frasi)
     _in_coda({"testo": frase, "da": "riepilogo"})
     registra("riepilogo", testo=frase)
+    return frase
+
+
+def frase_perso(dal, adesso=None):
+    """«Ciro, cosa mi sono perso?»: cosa e' successo da `dal` e chi ti aspetta adesso."""
+    adesso = time.time() if adesso is None else adesso
+    arrivate, da_chi, ripartiti, risolti, automatiche = 0, [], [], [], 0
+    for scheda in domande.elenca():
+        for passo in scheda.get("storia") or []:
+            if float(passo.get("t") or 0) < dal:
+                continue
+            stato = passo.get("stato")
+            if stato == "ricevuta":
+                arrivate += 1
+                da_chi.append(scheda.get("progetto"))
+            elif stato == "recepita":
+                ripartiti.append(scheda.get("progetto"))
+            elif stato == "risolta":
+                risolti.append(scheda.get("progetto"))
+            elif stato == "risposta-consegnata" and \
+                    str((scheda.get("risposta") or {}).get("motivo") or "").startswith("regola:"):
+                automatiche += 1
+    elenco = attese()
+    aspettano = [v for v in elenco if v.get("tipo") != "chat" and v.get("numero")]
+    urgenti = [v for v in elenco if v.get("tipo") == "chat" and v.get("urgente") and v.get("risposta")]
+
+    ora = time.strftime("%H:%M", time.localtime(dal))
+    parti = []
+    if arrivate:
+        parti.append((t("una domanda nuova da %s") if arrivate == 1 else t("%d domande nuove da %s") % (
+            arrivate, "%s")) % _elenco(da_chi))
+    if ripartiti:
+        parti.append(t("ripartito %s") % _elenco(ripartiti))
+    if risolti:
+        parti.append(t("risolto %s") % _elenco(risolti))
+    if automatiche:
+        parti.append(t("%d %s con le tue regole") % (
+            automatiche, t("risposta data") if automatiche == 1 else t("risposte date")))
+    frasi = [t("Dalle %s: %s.") % (ora, "; ".join(parti))] if parti else []
+    if aspettano:
+        voci = "; ".join("%s %s, %s" % (t("la"), numeri_parlati.parola(v["numero"], lingua()),
+                                        v.get("progetto") or "?") for v in aspettano[:5])
+        if len(aspettano) > 5:
+            voci += t("; e altre %d") % (len(aspettano) - 5)
+        frasi.append(t("Ti aspettano: %s.") % voci)
+    if urgenti:
+        frasi.append(t("In Chat, un messaggio urgente.") if len(urgenti) == 1
+                     else t("In Chat, %d messaggi urgenti.") % len(urgenti))
+    if not frasi:
+        return t("Niente di nuovo dalle %s, e nessuno ti aspetta.") % ora
+    if not parti:
+        frasi.insert(0, t("Niente di nuovo dalle %s.") % ora)
+    frase = " ".join(frasi)
+    registra("perso", dal=ora, arrivate=arrivate, aspettano=len(aspettano), urgenti=len(urgenti))
     return frase
 
 

@@ -474,6 +474,16 @@ PAUSA_RE = re.compile(r"^(?:(?:metti in |metti |attiva la )?pausa (?:ai |i |sui 
                       r"|(?:pause|mute) (?:the )?projects(?: except (.+))?)$")
 RIPRESA_RE = re.compile(r"^(?:(?:riprendi|riattiva|togli la pausa)(?: (?:ai |i |dei )?progetti)?"
                         r"|(?:resume|unpause|restart) (?:the )?projects)$")
+# «Ciro, cosa mi sono perso?»: il punto della situazione, senza modello
+PERSO_RE = re.compile(r"^(?:ciro )?(?:"
+                      r"(?:che |che cosa |cosa )?mi sono pers[oa](?: qualcosa| niente)?(?: ciro)?"
+                      r"|(?:che |che cosa |cosa )?(?:è|e) successo(?: mentre ero via| mentre non c'ero| nel frattempo)?"
+                      r"|(?:ci sono )?novit[aà]|cosa c'è di nuovo|che c'è di nuovo|aggiornami|fammi il punto"
+                      r"|what did i miss|what have i missed|did i miss anything|catch me up|any news|what's new|whats new"
+                      r")(?: ciro)?$")
+ASSENZA_SECONDI = 10 * 60      # silenzio oltre il quale «cosa mi sono perso» parte da li'
+PERSO_PREDEFINITO = 3600       # altrimenti: dall'ultima volta che l'ha chiesto, o l'ultima ora
+PERSO_MASSIMO = 12 * 3600
 IMPOSTA_RE = re.compile(r"^\s*IMPOSTA\s*:\s*(riepilogo)\s*\|\s*(\d{1,4})", re.IGNORECASE)
 
 
@@ -617,6 +627,9 @@ class Cervello:
         self.sentito_per_risposta = {}  # ID -> cosa aveva capito whisper (per imparare dalle correzioni)
         self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
         self.chiudi_chat = None       # il server collega la chiusura di un messaggio di Chat
+        self.riassunto_perso = None   # il server collega «cosa mi sono perso» (dal -> frase)
+        self.ultimo_utente_t = None   # l'ultima volta che l'utente ha detto qualcosa
+        self.ultimo_perso_t = None    # l'ultima volta che ha chiesto cosa si e' perso
         # numeri delle domande aperte («domanda tre»): accanto al contesto, sopravvivono ai riavvii
         self.numeri = modulo_numeri.Numeri(lambda: Path(CONTESTO).with_name("numeri-domande.json"))
         # cosa ha detto Ciro per ultimo: le risposte brevi («sì», «A», «rispondi B»)
@@ -1024,6 +1037,28 @@ class Cervello:
         self.ultimo_detto = {"tipo": "mandato", "id": progetto, "ora": time.time()}
         return self._detto(testo, esito, esito.startswith(t("Mandato")))
 
+    def _cosa_mi_sono_perso(self, testo, prima):
+        detto = re.sub(r"[^\w\s']+", " ", (testo or "").lower().replace("’", "'"))
+        detto = re.sub(r"\s+", " ", detto).strip()
+        if not PERSO_RE.match(detto) or self.riassunto_perso is None:
+            return None
+        adesso = time.time()
+        if prima and adesso - prima >= ASSENZA_SECONDI:
+            dal = prima                    # era via: da quando ha smesso di parlare
+        elif self.ultimo_perso_t:
+            dal = self.ultimo_perso_t      # l'ha gia' chiesto: solo le novita' da allora
+        else:
+            dal = adesso - PERSO_PREDEFINITO
+        dal = max(dal, adesso - PERSO_MASSIMO)
+        self.ultimo_perso_t = adesso
+        try:
+            frase = self.riassunto_perso(dal)
+        except Exception as errore:  # noqa: BLE001
+            frase = t("Non riesco a fare il punto: %s") % errore
+        # le risposte brevi che seguono non vanno a una domanda indovinata
+        self.ultimo_detto = {"tipo": "avviso", "id": None, "ora": adesso}
+        return self._detto(testo, frase, False)
+
     def _comando_pausa(self, testo):
         detto = re.sub(r"[^\w\s'-]+", " ", (testo or "").lower())
         detto = re.sub(r"\s+", " ", detto).strip()
@@ -1352,6 +1387,7 @@ class Cervello:
         testo = (testo or "").strip()
         if not testo:
             return {"risposta": "", "azione": None, "mandato": False}
+        prima_di_ora, self.ultimo_utente_t = self.ultimo_utente_t, time.time()
 
         # «parla inglese» / «speak Italian»: cambia lingua (voce, ascolto, modello)
         compatto = re.sub(r"[^a-zàèéìòù]", "", testo.lower())
@@ -1385,6 +1421,11 @@ class Cervello:
             if consumato is not None:
                 self.storico += [("io", testo), ("faccia", consumato["risposta"])]
                 return consumato
+
+        # «cosa mi sono perso?»: dall'ultima volta che hai parlato con Ciro, senza modello
+        perso = self._cosa_mi_sono_perso(testo, prima_di_ora)
+        if perso is not None:
+            return perso
 
         # «pausa progetti [tranne X]» / «riprendi i progetti»: subito, senza modello
         comando = self._comando_pausa(testo)
