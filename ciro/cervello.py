@@ -17,6 +17,8 @@ import threading
 import time
 from pathlib import Path
 
+from testi import lingua, per_lingua, t  # noqa: E402
+
 # root of the repository (ciro/, posta/, stato/); the scripts can be moved with env variables
 RADICE_PROGETTO = Path(__file__).resolve().parent.parent
 # the user's name, used only to address them (CIRO_UTENTE=Mario); generic by default
@@ -611,9 +613,9 @@ class Cervello:
             posta.rispondi_domanda(scheda["id"], scelta, None, motivo, "opencode")
         except posta.ErroreStato:
             self.domande_in_attesa.pop(scheda["id"], None)
-            return self._detto(testo_detto, "Già mandata.", False)
+            return self._detto(testo_detto, t("Già mandata."), False)
         except posta.ErrorePosta as errore:
-            return self._detto(testo_detto, "Non riesco a mandarla: %s" % errore, False)
+            return self._detto(testo_detto, t("Non riesco a mandarla: %s") % errore, False)
         self.domande_in_attesa.pop(scheda["id"], None)
         self.lettera_sospesa = None
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
@@ -623,7 +625,7 @@ class Cervello:
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
         # dice cosa ha capito: se e' sbagliato lo senti subito («annulla» entro 2 minuti)
         testo_opzione = (scheda.get("opzioni") or {}).get(scelta, "")
-        return self._detto(testo_detto, "Mandato: %s." % ", ".join(
+        return self._detto(testo_detto, t("Mandato: %s.") % ", ".join(
             x for x in (nome_opzione(scelta), testo_opzione) if x), True)
 
     def _detto(self, testo, risposta, mandato):
@@ -652,7 +654,7 @@ class Cervello:
         else:
             correzione = cambio.group(1).upper()
             if correzione not in opzioni:
-                return self._detto(testo, "Le opzioni erano %s." % ", ".join(opzioni), False)
+                return self._detto(testo, t("Le opzioni erano %s.") % ", ".join(opzioni), False)
             corpo = ("Correzione dell'utente alla domanda %s: la risposta giusta e' %s) %s."
                      % (scheda["id"], correzione, opzioni[correzione]))
             # whisper aveva capito male una risposta brevissima: lo ricordo (profilo voce)
@@ -668,14 +670,14 @@ class Cervello:
             attuale = domande.annota(scheda["id"], "utente", "correzione: %s" % correzione,
                                      correzione=correzione)
         except Exception as errore:  # noqa: BLE001
-            return self._detto(testo, "Non riesco a mandare la correzione: %s" % errore, False)
+            return self._detto(testo, t("Non riesco a mandare la correzione: %s") % errore, False)
         if correzione != "annulla":
             self.risposte_recenti[scheda["id"]] = (adesso, scheda, correzione)
         else:
             self.risposte_recenti.pop(scheda["id"], None)
-        risposta = "Correzione mandata a %s." % scheda["progetto"]
+        risposta = t("Correzione mandata a %s.") % scheda["progetto"]
         if attuale.get("stato") in ("recepita", "risolta"):
-            risposta += " Attenzione: potrebbe aver già agito."
+            risposta += t(" Attenzione: potrebbe aver già agito.")
         return self._detto(testo, risposta, True)
 
     @staticmethod
@@ -685,15 +687,15 @@ class Cervello:
             casella = trova_casella(progetto) or progetto.strip().lower()
             if verbo == "togli":
                 tolte = coordinatore.togli_autorizzazioni(casella)
-                return ("Fatto: da ora su %s chiedo sempre." % casella if tolte
-                        else "Su %s chiedevo gia' sempre." % casella)
+                return (t("Fatto: da ora su %s chiedo sempre.") % casella if tolte
+                        else t("Su %s chiedevo gia' sempre.") % casella)
             regole = coordinatore.elenca_autorizzazioni(casella)
         except Exception as errore:  # noqa: BLE001
-            return "Non riesco a leggere le autorizzazioni: %s" % errore
+            return t("Non riesco a leggere le autorizzazioni: %s") % errore
         if not regole:
-            return "Su %s non ho autorizzazioni: chiedo sempre." % casella
-        return "Su %s posso fare da solo: %s." % (
-            casella, "; ".join("deploy di prova dopo %s" % ", ".join(r.get("condizioni") or [])
+            return t("Su %s non ho autorizzazioni: chiedo sempre.") % casella
+        return t("Su %s posso fare da solo: %s.") % (
+            casella, "; ".join(t("deploy di prova dopo %s") % ", ".join(r.get("condizioni") or [])
                                for r in regole))
 
     def risposta_veloce(self, testo):
@@ -727,14 +729,14 @@ class Cervello:
                         "deploy di prova di %s dopo %s" % (scheda["progetto"],
                                                            ", ".join(scheda.get("condizioni") or [])))
                 except ValueError as errore:
-                    return self._detto(testo, "Non posso salvarla: %s." % errore, False)
+                    return self._detto(testo, t("Non posso salvarla: %s.") % errore, False)
                 esito = self._manda(scheda, scheda["raccomanda"], testo, "regola:%s" % regola["id"])
                 if esito["mandato"]:
-                    esito["risposta"] = "Salvata. " + esito["risposta"]
+                    esito["risposta"] = t("Salvata. ") + esito["risposta"]
                 return esito
             if NO_RE.match(detto):
                 self.autorizzazione_in_attesa = None
-                return self._detto(testo, "Va bene, non la salvo. La domanda resta in attesa.", False)
+                return self._detto(testo, t("Va bene, non la salvo. La domanda resta in attesa."), False)
             self.autorizzazione_in_attesa = None
 
         # «Hai detto tre?» dopo una lettera ambigua: «sì» la manda, il numero la corregge
@@ -744,7 +746,7 @@ class Cervello:
             if detto in ("si", "sì") or e_conferma(detto):
                 return self._manda(scheda, lettera_ambigua, testo, sentito=sentito_prima)
             if NO_RE.match(detto):
-                return self._detto(testo, "Va bene. Dimmi il numero: %s." % elenco_opzioni(
+                return self._detto(testo, t("Va bene. Dimmi il numero: %s.") % elenco_opzioni(
                     opzioni_per_voce(scheda)), False)
 
         # un messaggio libero aspetta conferma: «sì», «no», «annulla» sono per lui
@@ -788,7 +790,7 @@ class Cervello:
             ultimo = self.ultimo_detto or {}
             if (trovata and not progetto and ultimo.get("tipo") == "mandato"
                     and time.time() - ultimo.get("ora", 0) <= CORREZIONE_SECONDI and not self.domande_aperte):
-                return self._detto(testo, "Già mandata.", False)
+                return self._detto(testo, t("Già mandata."), False)
             return None
 
         if progetto:
@@ -810,7 +812,7 @@ class Cervello:
                 return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero,
                                           conferma=da_confermare, alternativa=alternativa, sentito=detto_parole)
         self.lettera_sospesa = lettera
-        return self._detto(testo, "Per quale progetto?", False)
+        return self._detto(testo, t("Per quale progetto?"), False)
 
     def _comando_pausa(self, testo):
         detto = re.sub(r"[^\w\s'-]+", " ", (testo or "").lower())
@@ -824,12 +826,12 @@ class Cervello:
                     permessi.append(trova_casella(nome) or nome)
             imposta("pausa_progetti", True)
             imposta("solo_progetti", permessi)
-            risposta = "Progetti in pausa" + (", tranne %s." % " e ".join(permessi) if permessi else ".")
+            risposta = t("Progetti in pausa") + (t(", tranne %s.") % t(" e ").join(permessi) if permessi else ".")
             return self._detto(testo, risposta, False)
         if RIPRESA_RE.match(detto):
             imposta("pausa_progetti", False)
             imposta("solo_progetti", [])
-            return self._detto(testo, "Progetti ripresi.", False)
+            return self._detto(testo, t("Progetti ripresi."), False)
         return None
 
     def _lettera_da_parole(self, detto):
@@ -855,7 +857,7 @@ class Cervello:
 
     def _chiedi_conferma(self, scheda, lettera, testo, sentito):
         self.conferma_lettera = (scheda, lettera, sentito)
-        return self._detto(testo, "Hai detto %s, %s? Di' sì, oppure il numero." % (
+        return self._detto(testo, t("Hai detto %s, %s? Di' sì, oppure il numero.") % (
             nome_opzione(lettera), opzioni_per_voce(scheda)[lettera]), False)
 
     def _rispondi_lettera(self, scheda, lettera, testo, ambigua=False, conferma=False,
@@ -879,17 +881,17 @@ class Cervello:
                 # Ciro ha detto «Consiglia X»: «sì» accetta il consiglio, e lo dice
                 return self._manda(scheda, scheda["raccomanda"], testo)
             else:
-                return self._detto(testo, "Rispondi con il numero: %s." % elenco_opzioni(opzioni), False)
+                return self._detto(testo, t("Rispondi con il numero: %s.") % elenco_opzioni(opzioni), False)
         if lettera not in opzioni:
-            return self._detto(testo, "Le opzioni sono: %s." % elenco_opzioni(opzioni), False)
+            return self._detto(testo, t("Le opzioni sono: %s.") % elenco_opzioni(opzioni), False)
         if opzioni == OPZIONI_DEPLOY_PROVA and scheda.get("operazione") == "deploy-prova":
             if lettera == "A":
                 return self._manda(scheda, scheda["raccomanda"], testo)
             if lettera == "C":
-                return self._detto(testo, "Va bene, resta in attesa.", False)
+                return self._detto(testo, t("Va bene, resta in attesa."), False)
             self.autorizzazione_in_attesa = scheda
-            condizioni = ", ".join(scheda.get("condizioni") or []) or "nessuna condizione"
-            return self._detto(testo, "Salvo: %s, deploy di prova, dopo %s. Confermi?"
+            condizioni = ", ".join(scheda.get("condizioni") or []) or t("nessuna condizione")
+            return self._detto(testo, t("Salvo: %s, deploy di prova, dopo %s. Confermi?")
                                % (scheda["progetto"], condizioni), False)
         return self._manda(scheda, lettera, testo, sentito=sentito)
 
@@ -923,22 +925,22 @@ class Cervello:
                 scelta = "N"
         if dette == OPZIONI_DEPLOY_PROVA:
             if scelta != "A":
-                return "Per il deploy di prova rispondi con A, B o C."
+                return t("Per il deploy di prova rispondi con uno, due o tre.")
             scelta = scheda["raccomanda"]
         if scelta not in opzioni:
-            return "Per mandarla mi serve la lettera: %s." % ", ".join(dette)
+            return t("Per mandarla mi serve il numero: %s.") % elenco_opzioni(dette)
         try:
             posta.rispondi_domanda(scheda["id"], scelta, testo, "utente", "opencode")
         except posta.ErroreStato:
-            return "Già mandata."
+            return t("Già mandata.")
         except posta.ErrorePosta as errore:
-            return "Non sono riuscito a mandarlo: %s" % errore
+            return t("Non sono riuscito a mandarlo: %s") % errore
         with self._lock:
             self.domande_in_attesa.pop(scheda["id"], None)
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
         self.decisioni_mandate[scheda.get("progetto")] = time.time()
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
-        return "Mandato a %s: %s, %s." % (scheda.get("progetto"), nome_opzione(scelta), opzioni.get(scelta, ""))
+        return t("Mandato a %s: %s, %s.") % (scheda.get("progetto"), nome_opzione(scelta), opzioni.get(scelta, ""))
 
     # ------------------------------------------------------------- contesto
     def _carica(self):
@@ -1065,9 +1067,9 @@ class Cervello:
             comando += ["--azione", "decisione"]
         _, errore, codice = _esegui(comando, 20)
         if codice != 0:
-            return "Non sono riuscito a mandarlo: %s" % (errore or "errore della posta")
+            return t("Non sono riuscito a mandarlo: %s") % (errore or "errore della posta")
         self.decisioni_mandate[azione["a"]] = time.time()
-        return "Mandato a %s." % azione["a"]
+        return t("Mandato a %s.") % azione["a"]
 
     # ------------------------------------------------------------------ fuori
     def chiedi(self, testo):
@@ -1137,7 +1139,7 @@ class Cervello:
             return {"risposta": esito, "azione": azione, "mandato": True}
         if self.azione_in_attesa and NO_RE.match(detto):
             self.azione_in_attesa = None
-            esito = "Va bene, non lo mando."
+            esito = t("Va bene, non lo mando.")
             self.storico += [("io", testo), ("faccia", esito)]
             return {"risposta": esito, "azione": None, "mandato": False}
 
@@ -1151,11 +1153,11 @@ class Cervello:
                 120,
             )
         except subprocess.TimeoutExpired:
-            return {"risposta": "Ci sto mettendo troppo. Riprova tra un momento.", "azione": None, "mandato": False}
+            return {"risposta": t("Ci sto mettendo troppo. Riprova tra un momento."), "azione": None, "mandato": False}
         if codice != 0 or not uscita:
             dettaglio = (errore or "").strip().splitlines()
             return {
-                "risposta": "Il cervello non risponde: %s" % (dettaglio[-1][:120] if dettaglio else "errore"),
+                "risposta": t("Il cervello non risponde: %s") % (dettaglio[-1][:120] if dettaglio else "errore"),
                 "azione": None,
                 "mandato": False,
             }
@@ -1172,7 +1174,7 @@ class Cervello:
             if impostazione:
                 minuti = max(0, min(1440, int(impostazione.group(2))))
                 imposta("riepilogo", minuti)
-                aggiunta = "Riepiloghi spenti." if minuti == 0 else "Riepilogo ogni %d minuti." % minuti
+                aggiunta = t("Riepiloghi spenti.") if minuti == 0 else t("Riepilogo ogni %d minuti.") % minuti
                 impostazioni_dette.append(aggiunta)
                 continue
             permesso = AUTORIZZAZIONE_RE.match(riga.strip())
@@ -1202,16 +1204,16 @@ class Cervello:
             if verbo == "aggiungi":
                 salvata = aggiungi_regola(valore)
                 if salvata and "segnat" not in risposta.lower():
-                    risposta = (risposta + " L'ho segnato: %s." % salvata).strip()
+                    risposta = (risposta + t(" L'ho segnato: %s.") % salvata).strip()
                 elif not salvata:
-                    risposta = (risposta + " Non sono riuscito a segnarlo.").strip()
+                    risposta = (risposta + t(" Non sono riuscito a segnarlo.")).strip()
             else:
                 tolta = togli_regola(valore)
                 if not tolta:
-                    risposta = (risposta + " Non trovo quella regola da togliere.").strip()
+                    risposta = (risposta + t(" Non trovo quella regola da togliere.")).strip()
                 elif "tolt" not in risposta.lower():
                     tolta = re.sub(r"^\d{2}/\d{2}/\d{4}:\s*", "", tolta)
-                    risposta = (risposta + " Ho tolto la regola: %s" % tolta).strip()
+                    risposta = (risposta + t(" Ho tolto la regola: %s") % tolta).strip()
 
         if azione:
             casella = trova_casella(azione["a"])
@@ -1223,7 +1225,7 @@ class Cervello:
                 self.azione_in_attesa = None
                 esito = self._invia(azione)
                 self.storico.append(("faccia", esito))
-                return {"risposta": esito, "azione": azione, "mandato": esito.startswith("Mandato")}
+                return {"risposta": esito, "azione": azione, "mandato": esito.startswith(t("Mandato"))}
             if casella and azione["tipo"] == "decisione" and casella in self.domande_aperte:
                 # risposta a una domanda che Ciro gli ha appena riportato: parte subito
                 self.domande_aperte.pop(casella, None)
@@ -1241,10 +1243,10 @@ class Cervello:
                 # una domanda alla volta: tolgo le altre domande e i "fatto" anticipati
                 frasi = [f for f in re.split(r"(?<=[.!?])\s+", risposta) if f and not f.endswith("?")]
                 frasi = [f for f in frasi if not re.match(r"(?i)^(fatto|mandato|inviato)\b", f)]
-                risposta = (" ".join(frasi) + " Lo mando a %s: %s. Confermi?" % (
+                risposta = (" ".join(frasi) + " " + t("Lo mando a %s: %s. Confermi?") % (
                     casella, azione["testo"][:160].rstrip("."))).strip()
             else:
-                risposta = "Non trovo nessuna sessione che si chiama %s. A chi lo mando?" % azione["a"]
+                risposta = t("Non trovo nessuna sessione che si chiama %s. A chi lo mando?") % azione["a"]
                 azione = None
                 self.azione_in_attesa = None
         else:
@@ -1252,7 +1254,7 @@ class Cervello:
 
         self.storico.append(("faccia", risposta))
         self.storico = self.storico[-80:]
-        return {"risposta": risposta or "Non ho una risposta.", "azione": azione, "mandato": False}
+        return {"risposta": risposta or t("Non ho una risposta."), "azione": azione, "mandato": False}
 
 
 if __name__ == "__main__":

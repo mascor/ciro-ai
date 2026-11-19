@@ -22,6 +22,8 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cervello as modulo_cervello
+from testi import lingua, t  # noqa: E402
+import testi as modulo_testi  # noqa: E402
 
 # domande strutturate: registro, coordinatore e posta (stessa cartella di posta.py)
 sys.path.insert(0, str(modulo_cervello.POSTA_SCRIPT.parent))
@@ -603,19 +605,19 @@ _ultimo_avviso = {}   # progetto -> ora dell'ultimo avviso detto
 
 
 def _frase_avviso(voce):
-    progetto = voce.get("progetto") or "una sessione"
+    progetto = voce.get("progetto") or t("una sessione")
     testo = _testo_parlabile(voce.get("testo"))
     if voce.get("tipo") == "domanda":
-        return "Da %s: %s. Come rispondo?" % (progetto, testo)
+        return t("Da %s: %s. Come rispondo?") % (progetto, testo)
     dettaglio = voce.get("dettaglio") or ""
     if len(dettaglio) > 250:  # domanda lunga: la riduco per la voce (domanda + opzioni)
         breve = _testo_parlabile(modulo_cervello.domanda_per_voce(dettaglio))
         if breve:
-            return "Da %s: %s. Come rispondo?" % (progetto, breve)
+            return t("Da %s: %s. Come rispondo?") % (progetto, breve)
     elif dettaglio:
-        return "Da %s, serve una %s: %s. Come rispondo?" % (progetto, voce.get("tipo"),
+        return t("Da %s, serve una %s: %s. Come rispondo?") % (progetto, t(voce.get("tipo") or ""),
                                                            _testo_parlabile(dettaglio))
-    return "Da %s, serve una %s: %s. Come rispondo?" % (progetto, voce.get("tipo"), testo)
+    return t("Da %s, serve una %s: %s. Come rispondo?") % (progetto, t(voce.get("tipo") or ""), testo)
 
 
 def giro_avvisi():
@@ -686,8 +688,8 @@ def filtra_coda(voci, attuali=None, adesso=None):
             tenute.append(voce)
     da_decidere = [v for v in tenute if v.get("tipo") == "domanda" or v.get("da") == "avvisi"]
     if len(da_decidere) > DOMANDE_DA_LEGGERE:
-        progetti = [v.get("progetto") or "una sessione" for v in da_decidere]
-        frase = ("Ci sono %d domande per te: da %s. Le trovi a sinistra; dimmi da quale parto."
+        progetti = [v.get("progetto") or t("una sessione") for v in da_decidere]
+        frase = (t("Ci sono %d domande per te: da %s. Le trovi a sinistra; dimmi da quale parto.")
                  % (len(da_decidere), _elenco(progetti)))
         tenute = [v for v in tenute if v not in da_decidere] + [
             {"testo": frase, "da": "riassunto", "quando": adesso}]
@@ -742,14 +744,14 @@ def frase_domanda(scheda):
     # a voce le opzioni sono numeri («uno, procedi; due, fermati»): le lettere si confondono
     opzioni = "; ".join("%s, %s" % (modulo_cervello.nome_opzione(lettera), _come_scritto(testo))
                         for lettera, testo in dette.items())
-    frase = "Da %s: %s" % (scheda.get("progetto") or "una sessione", domanda)
+    frase = t("Da %s: %s") % (scheda.get("progetto") or t("una sessione"), domanda)
     if scheda.get("operazione") == "credenziali":
-        return frase + " Scrivila nel campo protetto della pagina."
+        return frase + t(" Scrivila nel campo protetto della pagina.")
     if opzioni:
         frase += " %s." % opzioni
     if scheda.get("raccomanda") and dette == scheda.get("opzioni"):
-        frase += " Consiglia %s." % modulo_cervello.nome_opzione(scheda["raccomanda"])
-    return frase + " Come rispondo?"
+        frase += t(" Consiglia %s.") % modulo_cervello.nome_opzione(scheda["raccomanda"])
+    return frase + t(" Come rispondo?")
 
 
 # -------------------------------------------------------- pausa progetti
@@ -782,7 +784,7 @@ def frase_ripresa():
         return ""
     progetti = list(_in_pausa)
     _in_pausa.clear()
-    return ("Durante la pausa sono arrivate %d domande: da %s. Le trovi a sinistra."
+    return (t("Durante la pausa sono arrivate %d domande: da %s. Le trovi a sinistra.")
             % (len(progetti), _elenco(progetti)))
 
 
@@ -818,14 +820,14 @@ def _consegna_automatica(scheda, esito):
         return
     except Exception as errore:  # noqa: BLE001
         registra("errore-domande", domanda_id=scheda["id"], errore=repr(errore)[:300])
-        _in_coda({"testo": "Non riesco a consegnare la risposta a %s." % scheda.get("progetto"),
+        _in_coda({"testo": t("Non riesco a consegnare la risposta a %s.") % scheda.get("progetto"),
                   "da": "domande"})
         return
     if in_pausa(scheda.get("progetto")):
         registra("risposta-automatica", domanda_id=scheda["id"], scelta=esito["scelta"],
                  regola=esito.get("regola"), in_pausa=True)
         return
-    frase = "Ho risposto %s a %s, per la tua regola: %s." % (
+    frase = t("Ho risposto %s a %s, per la tua regola: %s.") % (
         esito["scelta"], scheda.get("progetto"), _testo_parlabile(esito.get("motivo") or ""))
     _in_coda({"testo": frase, "da": "domande", "tipo": "automatica",
               "progetto": scheda.get("progetto"), "domanda_id": scheda["id"]})
@@ -973,7 +975,7 @@ azzera_riepilogo()
 
 def _elenco(nomi):
     nomi = sorted(set(n for n in nomi if n))
-    return ", ".join(nomi[:-1]) + " e " + nomi[-1] if len(nomi) > 1 else (nomi[0] if nomi else "")
+    return ", ".join(nomi[:-1]) + t(" e ") + nomi[-1] if len(nomi) > 1 else (nomi[0] if nomi else "")
 
 
 def riepilogo_se_serve(adesso=None):
@@ -1006,16 +1008,16 @@ def riepilogo_se_serve(adesso=None):
                 _riepilogo["sollecitate"].add(scheda.get("id"))
     parti = []
     if ripartiti:
-        parti.append("ripartito %s" % _elenco(ripartiti))
+        parti.append(t("ripartito %s") % _elenco(ripartiti))
     if risolti:
-        parti.append("risolto %s" % _elenco(risolti))
+        parti.append(t("risolto %s") % _elenco(risolti))
     if automatiche:
-        parti.append("%d %s con le tue regole" % (automatiche, "risposta data" if automatiche == 1 else "risposte date"))
+        parti.append(t("%d %s con le tue regole") % (automatiche, t("risposta data") if automatiche == 1 else t("risposte date")))
     frasi = []
     if parti:
-        frasi.append("Riepilogo: %s." % "; ".join(parti))
+        frasi.append(t("Riepilogo: %s.") % "; ".join(parti))
     if ferme:
-        frasi.append("Aspettano te da oltre mezz'ora: %s." % _elenco(ferme))
+        frasi.append(t("Aspettano te da oltre mezz'ora: %s.") % _elenco(ferme))
     if not frasi:
         return None
     frase = " ".join(frasi)
@@ -1311,7 +1313,7 @@ class Gestore(BaseHTTPRequestHandler):
                     return
                 finally:
                     dato = corpo = None
-                frase = "Salvata nel Portachiavi come %s. Mandato." % servizio
+                frase = t("Salvata nel Portachiavi come %s. Mandato.") % servizio
                 _in_coda({"testo": frase, "da": "domande"})
                 self._invia(200, json.dumps({"ok": True, "servizio": servizio}))
             elif percorso == "/api/cervello":

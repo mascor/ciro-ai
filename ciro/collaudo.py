@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 import cervello as modulo_cervello
+from testi import lingua, per_lingua, t
 
 FRASI = ["uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"]
 FRASE_LIBERA = FRASI[-1]   # misura le pause e il riconoscimento delle frasi libere
@@ -42,9 +43,10 @@ SPIEGAZIONE_COMPITI = [
 
 
 def detta(frase, inizio="Di': "):
+    inizio = t(inizio)
     """How Ciro asks for a phrase: one sentence, a single letter as «la A»
     (a letter alone is hard to understand with a synthetic voice)."""
-    return inizio + ("la " + frase if len(frase) == 1 else frase) + "."
+    return inizio + ("la " + frase if len(frase) == 1 and lingua() == "it" else frase) + "."
 
 
 def normalizza(testo):
@@ -100,16 +102,16 @@ class Collaudo:
         if modo == "collaudo":
             self.fase = "compiti"
             self._avvia_compito(0)
-            return "Inizio il collaudo: tre compiti, ti dico io cosa fare."
+            return t("Inizio il collaudo: tre compiti, ti dico io cosa fare.")
         self.fase = "silenzio"
-        return "Inizio la calibrazione: ti guido io. Prima resta in silenzio per cinque secondi."
+        return t("Inizio la calibrazione: ti guido io. Prima resta in silenzio per cinque secondi.")
 
     def ferma(self):
         nome = "Collaudo" if self.modo == "collaudo" else "Calibrazione"
         self._chiudi_domande()
         self._ripristina_pausa()
         self.fase = "spento"
-        return "%s fermato." % nome if nome == "Collaudo" else "Calibrazione fermata."
+        return t("Collaudo fermato.") if nome == "Collaudo" else t("Calibrazione fermata.")
 
     def chiudi(self):
         """The user closed the result card."""
@@ -124,7 +126,7 @@ class Collaudo:
         if self.fase == "compiti":
             return PROMPT_COMPITI[self.compito]
         if self.fase == "silenzio":
-            return "Resta in silenzio per cinque secondi."
+            return t("Resta in silenzio per cinque secondi.")
         return ""
 
     def _ripristina_pausa(self):
@@ -139,18 +141,18 @@ class Collaudo:
             self.fase = "spento"
             return None
         if self.fase == "silenzio":
-            return {"fase": "silenzio", "titolo": "Calibrazione · silenzio", "dire": "",
-                    "spiegazione": "Resta in silenzio", "secondi": SILENZIO_SECONDI}
+            return {"fase": "silenzio", "titolo": t("Calibrazione · silenzio"), "dire": "",
+                    "spiegazione": t("Resta in silenzio"), "secondi": SILENZIO_SECONDI}
         if self.fase == "frasi":
-            return {"fase": "frasi", "titolo": "Calibrazione · frasi", "passo": self.indice + 1,
+            return {"fase": "frasi", "titolo": t("Calibrazione · frasi"), "passo": self.indice + 1,
                     "totale": len(FRASI), "dire": FRASI[self.indice], "ultima": self.ultima,
                     "esiti": [r["ok"] for r in self.frasi_sentite]}
         if self.fase == "compiti":
-            return {"fase": "compiti", "titolo": "Collaudo · compito %d di %d" % (self.compito + 1, len(PROMPT_COMPITI)),
+            return {"fase": "compiti", "titolo": t("Collaudo · compito %d di %d") % (self.compito + 1, len(PROMPT_COMPITI)),
                     "passo": self.compito + 1, "totale": len(PROMPT_COMPITI),
                     "dire": "", "spiegazione": SPIEGAZIONE_COMPITI[self.compito],
                     "esiti": [c["ok"] for c in self.compiti if c["ok"] is not None]}
-        return {"fase": "fine", "titolo": "Collaudo finito" if self.modo == "collaudo" else "Calibrazione finita",
+        return {"fase": "fine", "titolo": t("Collaudo finito") if self.modo == "collaudo" else t("Calibrazione finita"),
                 "riepilogo": self.riepilogo}
 
     # ------------------------------------------------------------ calibration
@@ -231,9 +233,9 @@ class Collaudo:
             modulo_cervello.aggiorna_profilo(**profilo)
         self.rumore.update(profilo)
         capite = sum(1 for r in self.frasi_sentite if r["ok"])
-        frase = "Calibrazione finita: ti ho capito %d frasi su %d." % (capite, len(FRASI))
+        frase = t("Calibrazione finita: ti ho capito %d frasi su %d.") % (capite, len(FRASI))
         if voce and voce < 5 * rumore:
-            frase += " Parli piano rispetto al rumore: avvicinati al microfono."
+            frase += t(" Parli piano rispetto al rumore: avvicinati al microfono.")
         self._chiudi(frase)
         if self.dopo_calibrazione:
             self.dopo_calibrazione()
@@ -245,7 +247,7 @@ class Collaudo:
         if STOP_RE.match(normalizza(testo)):
             return {"risposta": self.ferma(), "azione": None, "mandato": False}
         if self.fase == "silenzio":
-            return {"risposta": "Aspetta, sto misurando il silenzio.", "azione": None, "mandato": False}
+            return {"risposta": t("Aspetta, sto misurando il silenzio."), "azione": None, "mandato": False}
         if self.fase == "compiti":
             if self.compito < len(self.compiti):
                 self.compiti[self.compito]["turni"] += 1
@@ -262,7 +264,7 @@ class Collaudo:
             return {"risposta": prossima, "azione": None, "mandato": False}
         self.ripetuta = True
         self.chiesta = self.orologio()
-        return {"risposta": "Non ho capito bene. %s" % detta(FRASI[self.indice], "Ripeti: "),
+        return {"risposta": t("Non ho capito bene. %s") % detta(FRASI[self.indice], "Ripeti: "),
                 "azione": None, "mandato": False}
 
     # ------------------------------------------------------------ acceptance test
@@ -331,7 +333,7 @@ class Collaudo:
                 if not self.ripetuta:
                     self.ripetuta = True
                     self.chiesta = self.orologio()
-                    self.dire("Non ti ho sentito. %s" % detta(FRASI[self.indice], "Ripeti: "))
+                    self.dire(t("Non ti ho sentito. %s") % detta(FRASI[self.indice], "Ripeti: "))
                 else:
                     self._registra_frase(False)
                     prossima = self._prossima_frase()
@@ -359,9 +361,9 @@ class Collaudo:
         risposta = (statistics.mean(trascrizioni) if trascrizioni else 0) + \
                    (statistics.mean(cervello) if cervello else 0)
         riusciti = sum(1 for c in self.compiti if c["ok"])
-        frase = "Collaudo finito: %d compiti su %d" % (riusciti, len(PROMPT_COMPITI))
+        frase = t("Collaudo finito: %d compiti su %d") % (riusciti, len(PROMPT_COMPITI))
         if risposta:
-            frase += ", rispondo in circa %d secondi" % max(1, round(risposta))
+            frase += t(", rispondo in circa %d secondi") % max(1, round(risposta))
         self._chiudi(frase + ".", trascrizioni, cervello)
 
     # ------------------------------------------------------------ end
@@ -379,7 +381,7 @@ class Collaudo:
         self._chiudi_domande()
         self._ripristina_pausa()
         self.riepilogo = frase
-        self.dire(frase + " Il rapporto e' nella cartella collaudi.")
+        self.dire(frase + t(" Il rapporto e' nella cartella collaudi."))
         self._rapporto(trascrizioni, cervello)
         self.fase = "fine"
         self.finito = self.orologio()

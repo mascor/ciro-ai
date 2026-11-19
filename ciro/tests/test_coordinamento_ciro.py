@@ -472,7 +472,7 @@ class TestRisposteVeloci(BaseCiro):
                                "testo=fai come pensi sia meglio")
         esito = self.c.chiedi("fai come pensi sia meglio")
         self.assertFalse(esito["mandato"])
-        self.assertIn("lettera", esito["risposta"])
+        self.assertIn("numero", esito["risposta"])
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
 
     def test_risposta_con_le_parole_dell_opzione(self):
