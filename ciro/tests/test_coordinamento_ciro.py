@@ -106,7 +106,7 @@ class TestSorveglianza(BaseCiro):
         voci = self.coda()
         self.assertEqual(len(voci), 1)
         self.assertEqual(voci[0]["testo"],
-                         "Da ironworks: Quale schema uso per gli spazi Chat? "
+                         "Domanda uno, da ironworks: Quale schema uso per gli spazi Chat? "
                          "uno, uno spazio per progetto; due, uno spazio per cliente. "
                          "Consiglia uno. Come rispondo?")
         self.assertEqual(voci[0]["tipo"], "domanda")
@@ -297,7 +297,7 @@ class TestRisposteVeloci(BaseCiro):
         primo = self.annunciata("ironworks")
         secondo = self.annunciata("contoso")
         esito = self.c.chiedi("A")
-        self.assertEqual(esito["risposta"], "Per quale progetto?")
+        self.assertTrue(esito["risposta"].startswith("Quale domanda?"), esito["risposta"])
         self.assertFalse(esito["mandato"])
         self.assertEqual(domande.leggi(primo)["stato"], "in-attesa")
         self.assertEqual(domande.leggi(secondo)["stato"], "in-attesa")
@@ -567,7 +567,7 @@ class TestRisposteVeloci(BaseCiro):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
         server._cervello.annota_avviso("contoso", "Da contoso: serve una decisione.")
         esito = self.c.chiedi("sì")
-        self.assertEqual(esito["risposta"], "Per quale progetto?")
+        self.assertTrue(esito["risposta"].startswith("Quale domanda?"), esito["risposta"])
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
         self.assertTrue(self.c.chiedi("ironworks")["risposta"].startswith("Mandato"), self.c.chiedi("ironworks")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "S")
@@ -592,7 +592,7 @@ class TestRisposteVeloci(BaseCiro):
     def test_nome_progetto_dentro_una_frase_non_manda(self):
         primo = self.annunciata("ironworks")
         self.annunciata("contoso")
-        self.assertEqual(self.c.chiedi("A")["risposta"], "Per quale progetto?")
+        self.assertTrue(self.c.chiedi("A")["risposta"].startswith("Quale domanda?"))
         self.c.chiedi("aspetta, cosa vuole ironworks?")
         self.assertEqual(domande.leggi(primo)["stato"], "in-attesa")
         self.assertEqual(len(self.modello_chiamato), 1)

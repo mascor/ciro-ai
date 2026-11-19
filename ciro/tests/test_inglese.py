@@ -27,7 +27,7 @@ class TestInglese(BaseInglese):
     def test_domanda_detta_in_inglese(self):
         self.annunciata(opzioni={"A": "proceed", "B": "stop"})
         frase = self.coda()[-1]["testo"]
-        self.assertEqual(frase, "From ironworks: Quale schema uso per gli spazi Chat? "
+        self.assertEqual(frase, "Question one, from ironworks: Quale schema uso per gli spazi Chat? "
                                 "one, proceed; two, stop. I recommend one. How do I answer?")
 
     def test_risposte_in_inglese(self):
@@ -47,7 +47,7 @@ class TestInglese(BaseInglese):
     def test_progetto_e_correzione(self):
         primo = self.annunciata("ironworks", opzioni={"A": "proceed", "B": "stop"})
         self.annunciata("contoso", opzioni={"A": "proceed", "B": "stop"})
-        self.assertEqual(self.c.chiedi("one")["risposta"], "For which project?")
+        self.assertTrue(self.c.chiedi("one")["risposta"].startswith("Which question?"))
         self.assertTrue(self.c.chiedi("two for ironworks")["mandato"])
         self.assertEqual(domande.leggi(primo)["risposta"]["scelta"], "B")
         self.assertIn("Correction sent to ironworks", self.c.chiedi("answer one")["risposta"])

@@ -138,5 +138,11 @@ EN = {
         "During the pause %d questions arrived: from %s. They are on the left.",
     "Salvata nel Portachiavi come %s. Mandato.": "Saved in the Keychain as %s. Sent.",
     " e ": " and ",
+    # numbered questions
+    "Domanda %s, ": "Question %s, ",
+    "Quale domanda? %s.": "Which question? %s.",
+    "la": "number",
+    "Non c'è una domanda %s. %s": "There is no question %s. %s",
+    "Quella domanda è già chiusa.": "That question is already closed.",
     "Eccomi, sono sveglio.": "Here I am, I'm awake.",
 }

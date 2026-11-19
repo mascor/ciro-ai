@@ -17,6 +17,7 @@ import threading
 import time
 from pathlib import Path
 
+import numeri as modulo_numeri
 from testi import lingua, per_lingua, t  # noqa: E402
 
 # root of the repository (ciro/, posta/, stato/); the scripts can be moved with env variables
@@ -293,7 +294,7 @@ Mandare messaggi:
 - Se l'utente risponde a una domanda di una sessione che gli hai appena riportato, scrivi subito la riga AZIONE con tipo=decisione e la sua risposta fedele: parte senza altre conferme.
 - Per ogni altro messaggio, scrivi la riga AZIONE: il sistema gli chiede conferma prima di mandarlo. Non dire mai che l'hai gia' mandato.
 - Il destinatario e' il nome del progetto, non quello della sessione. Se ti chiede solo cosa succede, niente riga AZIONE.
-- Se ci sono piu' domande aperte di sessioni diverse, capisci dalla sua risposta a quale sessione si riferisce (nomina il progetto); se non e' chiaro, chiediglielo prima di scrivere la riga AZIONE.
+- Se ci sono piu' domande aperte di sessioni diverse, capisci dalla sua risposta a quale sessione si riferisce; se non e' chiaro, chiediglielo prima di scrivere la riga AZIONE, usando il numero della domanda (per esempio «La tre o la cinque?»): i numeri si capiscono meglio dei nomi dei progetti.
 - Con una riga AZIONE non fare altre domande nella stessa risposta, e non dire "fatto" o "mandato": lo dice il sistema.
 - Se risponde a una domanda che gli hai detto con le opzioni (uno = A, due = B, tre = C, oppure si'/no = S/N), aggiungi alla riga AZIONE "| scelta=<lettera>" e metti nel testo la sua nota.
 
@@ -335,7 +336,7 @@ Sending messages (keep these protocol words exactly as written, they are read by
 - If the user answers a session's question you have just reported, write the AZIONE line at once with tipo=decisione and their faithful answer: it is sent without further confirmation.
 - For any other message, write the AZIONE line: the system asks the user to confirm before sending it. Never say you have already sent it.
 - The recipient is the project name, not the session name. If the user only asks what is happening, no AZIONE line.
-- If several questions from different sessions are open, understand from the answer which session it refers to (name the project); if it is not clear, ask before writing the AZIONE line.
+- If several questions from different sessions are open, understand from the answer which session it refers to; if it is not clear, ask before writing the AZIONE line, using the question number (for example "Three or five?"): numbers are understood better than project names.
 - With an AZIONE line do not ask other questions in the same answer, and do not say "done" or "sent": the system says it.
 - If the user answers a question you read with options (one = A, two = B, three = C, or yes/no = S/N), add "| scelta=<letter>" to the AZIONE line and put their note in the text.
 
@@ -397,6 +398,10 @@ PAROLE_PRIMA = {"the", "answer", "option", "number", "letter", "i", "said", "say
                 "la", "il", "risposta", "rispondi", "rispondo", "scelgo", "opzione", "numero", "lettera",
                 "ho", "detto", "dico", "vai", "con", "metti", "e", "è", "cambia", "correggi", "in"}
 LETTERE_AMBIGUE = set("BCDE")   # dette come lettere si scambiano tra loro
+# «la tre: due», «domanda tre sì», «rispondi alla tre: uno», «question three yes»
+PRIMA_DEL_NUMERO = {"la", "alla", "domanda", "numero", "rispondi", "risposta", "per",
+                    "question", "number", "answer", "the"}
+DOPO_IL_NUMERO = {"rispondo", "risposta", "con", "e", "è", "opzione", "option", "answer", "is", "the"}
 
 
 def nome_opzione(lettera):
@@ -606,6 +611,8 @@ class Cervello:
         self.conferma_lettera = None   # (scheda, lettera, sentito): «Hai detto tre?» su una risposta incerta
         self.sentito_per_risposta = {}  # ID -> cosa aveva capito whisper (per imparare dalle correzioni)
         self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
+        # numeri delle domande aperte («domanda tre»): accanto al contesto, sopravvivono ai riavvii
+        self.numeri = modulo_numeri.Numeri(lambda: Path(CONTESTO).with_name("numeri-domande.json"))
         # cosa ha detto Ciro per ultimo: le risposte brevi («sì», «A», «rispondi B»)
         # vanno solo li'. tipo: domanda, automatica, avviso, proposta, mandato
         self.ultimo_detto = None
@@ -847,6 +854,11 @@ class Cervello:
         if corretto is not None:
             return corretto
 
+        # «tre, sì», «la tre: due», «domanda tre»: la domanda per numero
+        per_numero = self._risposta_per_numero(testo, detto_parole)
+        if per_numero is not None:
+            return per_numero
+
         # solo il nome del progetto, dopo «Per quale progetto?»
         if self.lettera_sospesa:
             lettera_sospesa, self.lettera_sospesa = self.lettera_sospesa, None
@@ -894,6 +906,12 @@ class Cervello:
             if len(detto) > 12:
                 return None  # una frase che inizia con una lettera
         ultimo = self.ultimo_detto or {}
+        # «domanda tre» l'ha appena ridetta: la risposta breve va a lei
+        if (ultimo.get("tipo") == "richiamata" and ultimo.get("id") in self.domande_in_attesa
+                and time.time() - ultimo.get("ora", 0) <= CORREZIONE_SECONDI):
+            return self._rispondi_lettera(self.domande_in_attesa[ultimo["id"]], lettera, testo,
+                                          ambigua=bool(trovata) and not era_numero, conferma=da_confermare,
+                                          alternativa=alternativa, sentito=detto_parole)
         if len(self.domande_in_attesa) == 1:
             scheda = next(iter(self.domande_in_attesa.values()))
             # dopo un riavvio Ciro non ha ancora detto nulla: c'e' una sola domanda
@@ -901,7 +919,80 @@ class Cervello:
                 return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero,
                                           conferma=da_confermare, alternativa=alternativa, sentito=detto_parole)
         self.lettera_sospesa = lettera
-        return self._detto(testo, t("Per quale progetto?"), False)
+        return self._detto(testo, self._quale_domanda(), False)
+
+    def _quale_domanda(self):
+        aperte = self.numeri.elenco()
+        if not aperte:
+            return t("Per quale progetto?")
+        return t("Quale domanda? %s.") % "; ".join(
+            "%s %s, %s" % (t("la"), modulo_numeri.parola(v["numero"], lingua()), v.get("progetto") or "?")
+            for v in aperte[:5])
+
+    def _risposta_per_numero(self, testo, detto):
+        """La domanda indicata con il suo numero. None se il testo non lo fa."""
+        parole = detto.split()
+        esplicita = False
+        while parole and parole[0] in PRIMA_DEL_NUMERO:
+            esplicita = esplicita or parole[0] in ("domanda", "numero", "question", "number")
+            parole.pop(0)
+        if not parole:
+            return None
+        primo, resto = parole[0], [p for p in parole[1:] if p not in DOPO_IL_NUMERO]
+        if primo.isdigit() and len(primo) == 2 and not resto and self.numeri.cerca(int(primo)) is None:
+            primo, resto = primo[0], [primo[1]]   # «32»: domanda tre, opzione due
+        numero = modulo_numeri.DETTI.get(primo)
+        if not numero:
+            return None
+        voce = self.numeri.cerca(numero)
+        if not resto:
+            if self.lettera_sospesa and voce:   # dopo «Quale domanda?»: «la tre»
+                lettera, self.lettera_sospesa = self.lettera_sospesa, None
+                return self._rispondi_numerata(voce, lettera, testo, detto)
+            if not esplicita:
+                return None   # «due» da solo: un'opzione dell'ultima domanda detta
+            if voce is None:
+                return self._detto(testo, self._non_ce(numero), False)
+            # «domanda tre»: la ridice, e le risposte brevi vanno a lei
+            if voce.get("domanda_id"):
+                self.domanda_corrente = voce["domanda_id"]
+                self.ultimo_detto = {"tipo": "richiamata", "id": voce["domanda_id"], "ora": time.time()}
+            else:
+                self.ultimo_detto = {"tipo": "avviso", "id": voce.get("progetto"), "ora": time.time()}
+            return self._detto(testo, voce.get("frase") or voce.get("progetto") or "", False)
+        if len(resto) != 1:
+            return None   # una frase che comincia con un numero
+        risposta = resto[0]
+        if risposta in ("si", "sì", "yes"):
+            lettera = "si"
+        elif risposta == "no":
+            lettera = "no"
+        elif risposta in NUMERI_RISPOSTA:
+            lettera = NUMERI_RISPOSTA[risposta].upper()
+        elif len(risposta) == 1 and risposta in "abcde":
+            lettera = risposta.upper()
+        else:
+            return None
+        if voce is None:
+            return self._detto(testo, self._non_ce(numero), False)
+        return self._rispondi_numerata(voce, lettera, testo, detto)
+
+    def _non_ce(self, numero):
+        return t("Non c'è una domanda %s. %s") % (modulo_numeri.parola(numero, lingua()), self._quale_domanda())
+
+    def _rispondi_numerata(self, voce, lettera, testo, detto):
+        if voce.get("domanda_id"):
+            scheda = self.domande_in_attesa.get(voce["domanda_id"])
+            if scheda is None:
+                return self._detto(testo, t("Quella domanda è già chiusa."), False)
+            return self._rispondi_lettera(scheda, lettera, testo, sentito=detto)
+        # un messaggio di posta o una sessione che aspetta: la risposta va a quel progetto
+        progetto = voce.get("progetto")
+        detta = {"si": "Sì", "no": "No"}.get(lettera, lettera)
+        esito = self._invia({"a": progetto, "tipo": "decisione", "oggetto": "risposta: %s" % detta,
+                             "testo": "%s (risposta di %s, detta a Ciro)" % (detta, NOME_UTENTE)})
+        self.ultimo_detto = {"tipo": "mandato", "id": progetto, "ora": time.time()}
+        return self._detto(testo, esito, esito.startswith(t("Mandato")))
 
     def _comando_pausa(self, testo):
         detto = re.sub(r"[^\w\s'-]+", " ", (testo or "").lower())
@@ -1094,6 +1185,12 @@ class Cervello:
         parti += ["Open Claude Code sessions:" if en else "Sessioni Claude Code aperte:", quadro_sessioni(), ""]
         parti += ["Incoming mail (opencode mailbox):" if en else "Posta in arrivo (casella opencode):",
                   posta_recente(), ""]
+        aperte = self.numeri.elenco()
+        if aperte:
+            parti += ["Open questions, by number:" if en else "Domande aperte, per numero:"]
+            parti += ["%d. %s: %s" % (v["numero"], v.get("progetto") or "?", (v.get("frase") or "")[:200])
+                      for v in aperte]
+            parti.append("")
         if self.azione_in_attesa:
             parti += [
                 ("Action proposed and not yet confirmed: %s" if en else

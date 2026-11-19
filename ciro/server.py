@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cervello as modulo_cervello
 from testi import lingua, t  # noqa: E402
+import numeri as numeri_parlati
 import testi as modulo_testi  # noqa: E402
 
 # domande strutturate: registro, coordinatore e posta (stessa cartella di posta.py)
@@ -627,7 +628,30 @@ def attese(sessioni=None):
                        # il corpo porta la domanda completa con le opzioni A/B/C
                        "dettaglio": modulo_cervello._inizio_testo(messaggio)[:3000]})
     elenco.sort(key=lambda v: -v["secondi"])  # prima chi aspetta da piu' tempo
+    numera(elenco)
     return elenco[:10]
+
+
+def chiave_numero(voce):
+    return voce.get("domanda_id") or _chiave(voce)
+
+
+def numera(elenco):
+    """Ogni domanda aperta ha il suo numero («domanda tre»): lo stesso finche' resta aperta."""
+    numeri = _cervello.numeri
+    for voce in elenco:
+        # la frase completa la salva chi la dice (avvisi, domande); qui solo una di riserva
+        riserva = t("Da %s: %s") % (voce.get("progetto") or t("una sessione"), _testo_parlabile(voce.get("testo")))
+        voce["numero"] = numeri.numero(chiave_numero(voce), predefinite={"frase": riserva},
+                                       progetto=voce.get("progetto"), domanda_id=voce.get("domanda_id"))
+    numeri.allinea({chiave_numero(v) for v in elenco})
+
+
+def con_numero(frase, numero):
+    """«Da alpha: ...» -> «Domanda tre, da alpha: ...»."""
+    if not numero:
+        return frase
+    return t("Domanda %s, ") % numeri_parlati.parola(numero, lingua()) + frase[:1].lower() + frase[1:]
 
 
 # ----------------------------------------------- avvisi spontanei di Ciro
@@ -688,6 +712,8 @@ def giro_avvisi():
             continue  # stessa sessione appena annunciata (sessione e posta insieme)
         _ultimo_avviso[progetto] = time.time()
         frase = _frase_avviso(voce)
+        _cervello.numeri.numero(chiave_numero(voce), frase=frase)
+        frase = con_numero(frase, voce.get("numero"))
         with _coda_lock:
             if len(_coda) < 10:
                 _coda.append({"testo": frase, "da": "avvisi", "chiave": chiave,
@@ -852,7 +878,9 @@ def _metti_in_attesa(scheda):
         _in_pausa.append(scheda.get("progetto"))
         registra("domanda-in-pausa", domanda_id=scheda["id"])
         return  # resta nel pannello, la dira' il riassunto alla ripresa
-    frase = frase_domanda(scheda)
+    numero = _cervello.numeri.numero(scheda["id"], progetto=scheda.get("progetto"), domanda_id=scheda["id"],
+                                     frase=frase_domanda(scheda))
+    frase = con_numero(frase_domanda(scheda), numero)
     _in_coda({"testo": frase, "da": "domande", "tipo": "domanda", "progetto": scheda.get("progetto"),
               "domanda_id": scheda["id"], "opzioni": modulo_cervello.opzioni_per_voce(scheda),
               "operazione": scheda.get("operazione"), "nome_credenziale": nome_credenziale(scheda)})

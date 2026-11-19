@@ -815,6 +815,13 @@ function disegnaAttese(elenco) {
     testa.className = "attesa-testa";
     const progetto = document.createElement("b");
     progetto.textContent = attesa.progetto || "?";
+    if (attesa.numero) {
+      // il numero della domanda: a voce «tre, sì» invece del nome del progetto
+      const numero = document.createElement("span");
+      numero.className = "numero-domanda";
+      numero.textContent = "#" + attesa.numero;
+      progetto.prepend(numero);
+    }
     const quando = document.createElement("span");
     quando.textContent = `${T(attesa.tipo)} · ${testoAttesa(attesa.secondi)}`;
     testa.append(progetto, quando);
