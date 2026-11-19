@@ -48,3 +48,22 @@ Speaker identification (Ciro does not tell your voice from others), wake word, m
 State machine in `ciro/collaudo.py`, driven by the server loop (`tick`, every 2 s) and by the
 brain (`gestisci(testo)` before any other handling while phases 1–2 run). The page sends the
 level of each capture with `/api/cervello` and runs the silence measurement on a queued command.
+
+## Revision (19/11/2026, after measuring)
+
+Measured on the same audio before deciding:
+- whisper with Silero voice activity detection: noise and silence are no longer transcribed
+  ("Grazie a tutti" disappears); phrases unchanged. **Adopted** for every transcription.
+- an initial prompt with Ciro's vocabulary: whisper copied it ("Sì, no.", "B" for "A"). Rejected.
+- a short-answer grammar, an adaptive audio context, a persistent whisper-server: worse or no
+  faster (the time goes into the 30 s encoder window, not into loading the model). Rejected.
+
+So the calibration became shorter and the tasks moved to their own command:
+- **«Ciro, calibrati»** (about 40 s): 5 s of silence, 5 phrases (A, B, sì, no, "B per prova due").
+  Threshold = max(0.008, min(2.5 × noise p95, 0.35 × median voice level)); a warning when the
+  noise threshold is above the voice one. The phrases' audio is kept locally in
+  `~/.config/faccia/collaudi/audio/` to measure recognition with the real voice.
+- **«Ciro, collaudo»**: the three tasks, to run after a change.
+- A guide card on the page shows the step, the phrase to say in large type, what was heard
+  (✓/✗) and the buttons Ripeti / Ferma / Chiudi.
+- Answers can also use the words of an option ("procedi" for A).

@@ -277,6 +277,36 @@ html, body {
   margin-left: -.6em;
   padding-left: calc(.6em - 3px);
 }
+/* scheda guida della calibrazione e del collaudo */
+#guida {
+  position: absolute;
+  top: 9vh;
+  left: calc(50% + (var(--fascia) - var(--destra)) / 2);
+  transform: translateX(-50%);
+  width: min(92vw, 460px);
+  padding: 16px 20px 14px;
+  border-radius: 16px;
+  background: rgba(8, 14, 24, .93);
+  border: 1px solid rgba(110, 231, 249, .45);
+  color: #e8eef5;
+  z-index: 20;
+  text-align: center;
+}
+#guida[hidden] { display: none; }
+#guida .guida-testa { display: flex; justify-content: space-between; gap: 10px; font-size: 12px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--testo-tenue); }
+#guida-passi { letter-spacing: .25em; }
+#guida-spiegazione { margin: 12px 0 4px; font-size: 16px; color: #aab6c4; }
+#guida-dire { margin: 2px 0 6px; font-size: 40px; font-weight: 700; color: #fff; min-height: 1em; }
+#guida-dire:empty { display: none; }
+#guida-sentito { margin: 4px 0 10px; font-size: 16px; min-height: 1.2em; }
+#guida-sentito.ok { color: #6ee7a8; }
+#guida-sentito.no { color: #f59e8b; }
+#guida .guida-pulsanti { display: flex; gap: 10px; justify-content: center; }
+#guida .guida-pulsanti button { font-size: 14px; padding: 7px 14px; border-radius: 8px; border: 0;
+  cursor: pointer; background: #2a3442; color: #e8eef5; }
+#guida .guida-pulsanti button[hidden] { display: none; }
+
 /* pausa progetti: accanto all'interruttore */
 #pausa-progetti {
   position: absolute;

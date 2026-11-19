@@ -994,7 +994,7 @@ def quadro():
     """Dati per i pannelli: consumi, chi ti aspetta e le sessioni aperte."""
     sessioni = modulo_cervello.leggi_sessioni() or []
     return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni),
-            "pausa": stato_pausa(), "collaudo": _collaudo.fase,
+            "pausa": stato_pausa(), "collaudo": _collaudo.fase, "guida": _collaudo.stato_guida(),
             "microfono": {"soglia": modulo_cervello.leggi_impostazioni().get("soglia_microfono")}}
 
 
@@ -1102,6 +1102,10 @@ class Gestore(BaseHTTPRequestHandler):
                          secondi_voce=round(time.time() - inizio, 1))
                 self._invia(200, byte_wav, "audio/wav")
             elif percorso == "/api/ascolta":
+                if _collaudo.fase == "frasi":   # le frasi della calibrazione restano sul Mac, per misure
+                    cartella = CONFIG_FACCIA / "collaudi" / "audio"
+                    cartella.mkdir(parents=True, exist_ok=True)
+                    (cartella / ("frase-%s.wav" % time.strftime("%Y%m%d-%H%M%S"))).write_bytes(corpo)
                 inizio = time.time()
                 testo = trascrivi(corpo)
                 registra("ascolto", testo=testo, audio_kb=len(corpo) // 1024,
@@ -1130,7 +1134,15 @@ class Gestore(BaseHTTPRequestHandler):
                 dato = json.loads(corpo or b"{}")
                 with _cervello_lock:
                     if dato.get("azione") == "avvia":
-                        esito = {"risposta": _collaudo.avvia(), "comando": "misura-silenzio", "secondi": 10}
+                        esito = {"risposta": _collaudo.avvia("calibrazione"), "comando": "misura-silenzio",
+                                 "secondi": modulo_collaudo.SILENZIO_SECONDI}
+                    elif dato.get("azione") == "collaudo":
+                        esito = {"risposta": _collaudo.avvia("collaudo")}
+                    elif dato.get("azione") == "ripeti":
+                        esito = {"risposta": _collaudo.ripeti()}
+                    elif dato.get("azione") == "chiudi":
+                        _collaudo.chiudi()
+                        esito = {"risposta": ""}
                     elif dato.get("tipo") == "silenzio":
                         esito = {"risposta": _collaudo.silenzio(dato.get("medio") or 0, dato.get("p95") or 0,
                                                                 dato.get("massimo") or 0)}

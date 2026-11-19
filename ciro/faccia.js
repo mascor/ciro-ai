@@ -907,6 +907,7 @@ pulsantePausa.addEventListener("click", async () => {
 
 function disegnaQuadro(dati) {
   disegnaPausa(dati.pausa);
+  disegnaGuida(dati.guida);
   const calibrata = dati.microfono && Number(dati.microfono.soglia);
   if (calibrata > 0) sogliaCalibrata = calibrata;
   disegnaConsumi(dati.consumi || []);
@@ -1102,6 +1103,60 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", aggiornaQuadro);
 aggiornaQuadro();
 
+// ------------------------------------------- scheda guida (calibrazione e collaudo)
+const schedaGuida = document.getElementById("guida");
+let contoSilenzio = 0; // secondi rimasti mentre misura il silenzio
+
+function disegnaGuida(g) {
+  schedaGuida.hidden = !g;
+  if (!g) return;
+  document.getElementById("guida-titolo").textContent = g.titolo || "";
+  const esiti = g.esiti || [];
+  let passi = "";
+  for (let i = 0; i < (g.totale || 0); i++) {
+    passi += i < esiti.length ? (esiti[i] ? "✓" : "✗") : i === esiti.length ? "●" : "○";
+  }
+  document.getElementById("guida-passi").textContent = passi;
+  const spiegazione = document.getElementById("guida-spiegazione");
+  const dire = document.getElementById("guida-dire");
+  const sentito = document.getElementById("guida-sentito");
+  sentito.className = "";
+  sentito.textContent = "";
+  dire.textContent = "";
+  if (g.fase === "silenzio") {
+    spiegazione.textContent = contoSilenzio > 0 ? `Resta in silenzio… ${contoSilenzio}` : "Resta in silenzio";
+  } else if (g.fase === "frasi") {
+    spiegazione.textContent = "Di':";
+    dire.textContent = `«${g.dire}»`;
+    if (g.ultima) {
+      sentito.textContent = `Ho sentito: «${g.ultima.sentito}» ${g.ultima.ok ? "✓" : "✗"}`;
+      sentito.className = g.ultima.ok ? "ok" : "no";
+    }
+  } else if (g.fase === "compiti") {
+    spiegazione.textContent = g.spiegazione || "";
+  } else {
+    spiegazione.textContent = g.riepilogo || "";
+  }
+  const finita = g.fase === "fine";
+  document.getElementById("guida-ripeti").hidden = finita;
+  document.getElementById("guida-ferma").hidden = finita;
+  document.getElementById("guida-chiudi").hidden = !finita;
+}
+
+async function azioneGuida(azione) {
+  try {
+    const risposta = await fetch("/api/collaudo", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ azione }),
+    });
+    const dato = await risposta.json();
+    if (dato.risposta) di(dato.risposta);
+  } catch (errore) { /* riprovo al prossimo clic */ }
+  aggiornaQuadro();
+}
+document.getElementById("guida-ripeti").addEventListener("click", () => azioneGuida("ripeti"));
+document.getElementById("guida-ferma").addEventListener("click", () => azioneGuida("ferma"));
+document.getElementById("guida-chiudi").addEventListener("click", () => azioneGuida("chiudi"));
+
 // ------------------------------------------- calibrazione guidata
 // «Ciro, calibrati»: il server chiede di misurare il silenzio dopo aver parlato.
 function eseguiComando(dato) {
@@ -1114,7 +1169,11 @@ async function misuraSilenzio(secondi) {
   await new Promise((r) => setTimeout(r, 600));
   misurando = [];
   stato.textContent = "Misuro il silenzio…";
-  await new Promise((r) => setTimeout(r, secondi * 1000));
+  for (contoSilenzio = secondi; contoSilenzio > 0; contoSilenzio--) {
+    const testo = document.getElementById("guida-spiegazione");
+    if (testo) testo.textContent = `Resta in silenzio… ${contoSilenzio}`;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
   const campioni = misurando.slice().sort((a, b) => a - b);
   misurando = null;
   impostaFase(micAttivo ? "ascolto" : "pronto");

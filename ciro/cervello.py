@@ -983,13 +983,17 @@ class Cervello:
         # calibrazione guidata: «Ciro, calibrati»; mentre misura, le frasi non sono comandi
         if self.collaudo is not None:
             detto = re.sub(r"[^\w\s]+", " ", testo.lower()).split()
-            if " ".join(w for w in detto if w != "ciro") in ("calibrati", "calibrazione", "collaudo",
-                                                               "fai la calibrazione", "avvia la calibrazione",
-                                                               "calibrazione guidata"):
-                risposta = self.collaudo.avvia()
+            comando = " ".join(w for w in detto if w != "ciro")
+            if comando in ("calibrati", "calibrazione", "fai la calibrazione", "avvia la calibrazione",
+                           "calibrazione guidata"):
+                risposta = self.collaudo.avvia("calibrazione")
                 self.storico += [("io", testo), ("faccia", risposta)]
                 return {"risposta": risposta, "azione": None, "mandato": False,
-                        "comando": "misura-silenzio", "secondi": 10}
+                        "comando": "misura-silenzio", "secondi": 5}
+            if comando in ("collaudo", "fai il collaudo", "avvia il collaudo", "collaudati"):
+                risposta = self.collaudo.avvia("collaudo")
+                self.storico += [("io", testo), ("faccia", risposta)]
+                return {"risposta": risposta, "azione": None, "mandato": False}
             consumato = self.collaudo.gestisci(testo, self.ultimo_livello)
             if consumato is not None:
                 self.storico += [("io", testo), ("faccia", consumato["risposta"])]
