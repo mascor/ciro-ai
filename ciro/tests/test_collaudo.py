@@ -22,7 +22,11 @@ class BaseCollaudo(BaseCiro):
             dire=lambda frase, **extra: self.detti.append(frase),
             stato_pausa=lambda: dict(self.pausa), imposta_pausa=imposta_pausa,
             cartella=self.tmp / "collaudi", orologio=lambda: self.adesso[0],
-            righe_registro=lambda dal: [])
+            righe_registro=lambda dal: [], dopo_calibrazione=self._dopo)
+        self.c.chiamata_dopo = 0
+
+    def _dopo(self):
+        self.c.chiamata_dopo += 1
 
     def avanti(self, secondi):
         self.adesso[0] += secondi
@@ -44,7 +48,7 @@ class TestCalibrazione(BaseCollaudo):
         self.assertEqual(self.c.gestisci("pausa progetti", 0.05)["risposta"], "Aspetta, sto misurando il silenzio.")
         self.assertEqual(self.c.silenzio(0.002, 0.004, 0.01), "Ora ripeti dopo di me: uno.")
         guida = self.c.stato_guida()
-        self.assertEqual((guida["fase"], guida["passo"], guida["totale"], guida["dire"]), ("frasi", 1, 5, "uno"))
+        self.assertEqual((guida["fase"], guida["passo"], guida["totale"], guida["dire"]), ("frasi", 1, 6, "uno"))
 
     def test_frasi_giuste_e_sbagliate(self):
         self.c.avvia("calibrazione")
@@ -74,11 +78,11 @@ class TestCalibrazione(BaseCollaudo):
     def test_fine_soglia_da_rumore_e_voce(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.004, 0.01)
-        for detta in ("uno", "Due", "si", "No.", "uno per prova 2"):
+        for detta in ("uno", "Due", "si", "No.", "uno per prova 2", "Come stanno le sessioni oggi?"):
             self.c.gestisci(detta, 0.08)
         self.assertEqual(self.c.fase, "fine")
         self.assertTrue(self.detti[-1].startswith("Calibrazione finita"), self.detti)
-        self.assertIn("5 frasi su 5", self.detti[-1])
+        self.assertIn("6 frasi su 6", self.detti[-1])
         # threshold between the room noise (2.5 x p95) and the voice (0.35 x median)
         # threshold between the mean room noise and the voice: sqrt(0.002 x 0.08)
         self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.0126)
@@ -87,7 +91,7 @@ class TestCalibrazione(BaseCollaudo):
         self.assertIn("Rumore", self.rapporti()[0].read_text(encoding="utf-8"))
         guida = self.c.stato_guida()
         self.assertEqual(guida["fase"], "fine")
-        self.assertIn("5 frasi su 5", guida["riepilogo"])
+        self.assertIn("6 frasi su 6", guida["riepilogo"])
         self.c.chiudi()
         self.assertIsNone(self.c.stato_guida())
         self.assertEqual(self.c.fase, "spento")
@@ -95,7 +99,7 @@ class TestCalibrazione(BaseCollaudo):
     def test_voce_debole_avvisa_e_soglia_sotto_la_voce(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.008, 0.02, 0.03)           # noisy room
-        for detta in ("uno", "due", "sì", "no", "uno per prova due"):
+        for detta in ("uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"):
             self.c.gestisci(detta, 0.03)              # quiet voice: 0.35 x 0.03 = 0.0105
         self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.015)  # half the voice
         self.assertIn("avvicinati al microfono", self.detti[-1])
@@ -103,10 +107,33 @@ class TestCalibrazione(BaseCollaudo):
     def test_picco_nel_silenzio_non_da_falso_avviso(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.0048, 0.0227, 0.0277)      # quiet room with one peak (19/11, real data)
-        for detta in ("uno", "due", "sì", "no", "uno per prova due"):
+        for detta in ("uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"):
             self.c.gestisci(detta, 0.0832)
         self.assertNotIn("avvicinati", self.detti[-1])
         self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.02)
+
+    def test_frase_lunga_basta_la_maggior_parte(self):
+        self.c.avvia("calibrazione")
+        self.c.silenzio(0.002, 0.003, 0.01)
+        for detta in ("uno", "due", "sì", "no", "uno per prova due"):
+            self.c.gestisci(detta, 0.05)
+        self.c.gestisci("come stanno sessioni oggi", 0.05)
+        self.assertTrue(self.c.frasi_sentite[-1]["ok"])
+
+    def test_profilo_dalla_calibrazione(self):
+        self.c.avvia("calibrazione")
+        self.c.silenzio(0.002, 0.003, 0.01, eco=0.4)
+        self.c.gestisci("di", 0.05, [])               # «uno» heard as «di»: retry
+        self.c.gestisci("uno", 0.05, [300])
+        for detta, pause in (("due", []), ("sì", []), ("no", []), ("uno per prova due", [250, 400]),
+                             ("come stanno le sessioni oggi", [350, 500, 300])):
+            self.c.gestisci(detta, 0.05, pause)
+        profilo = modulo_cervello.profilo_voce()
+        self.assertEqual(profilo["confusioni"], {"di": "uno"})
+        self.assertEqual(profilo["eco"], 0.4)
+        # end of speech: 90th percentile of the pauses (500) + 250 ms, between 600 and 1200
+        self.assertEqual(profilo["fine_frase_ms"], 750)
+        self.assertEqual(self.c.chiamata_dopo, 1)
 
     def test_ripeti_e_ferma(self):
         self.c.avvia("calibrazione")
@@ -164,6 +191,27 @@ class TestVoce(unittest.TestCase):
         self.assertEqual(server.per_voce("Mandato: A."), "Mandato: a.")
         # words and acronyms are not touched
         self.assertEqual(server.per_voce("API e CPU, Alice"), "API e CPU, Alice")
+
+
+class TestSceltaModello(unittest.TestCase):
+    def test_il_piu_veloce_che_capisce_come_il_grande(self):
+        risultati = {"large-v3-turbo": (10, 1.5), "small": (10, 0.4), "base": (9, 0.2)}
+        self.assertEqual(server.scegli_modello(risultati), "small")
+        risultati["base"] = (10, 0.2)
+        self.assertEqual(server.scegli_modello(risultati), "base")
+        self.assertIsNone(server.scegli_modello({"large-v3-turbo": (10, 1.5), "base": (6, 0.2)}))
+
+
+class TestImparaAudio(BaseCiro):
+    def test_correzione_salva_l_audio_nel_banco(self):
+        cartella = self.tmp / "audio"
+        server._ultimi_audio.clear()
+        server._ultimi_audio.append(("a", b"RIFF-finto"))
+        nome = server.impara_audio({"sentito": "a", "giusta": "due"}, cartella)
+        self.assertTrue((cartella / nome).is_file())
+        import json
+        self.assertEqual(json.loads((cartella / "etichette.json").read_text())[nome], "due")
+        self.assertIsNone(server.impara_audio({"sentito": "zz", "giusta": "due"}, cartella))
 
 
 class TestTrascrizione(unittest.TestCase):
