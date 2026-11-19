@@ -167,6 +167,22 @@ class TestVoce(unittest.TestCase):
         self.assertEqual(server.per_voce("API e CPU, Alice"), "API e CPU, Alice")
 
 
+class TestTrascrizione(unittest.TestCase):
+    def test_modello_per_durata(self):
+        self.assertEqual(server.passate_whisper(1.5, rapido_esiste=True),
+                         [("rapido", True), ("rapido", False)])
+        self.assertEqual(server.passate_whisper(4.0, rapido_esiste=True), [("preciso", True)])
+        self.assertEqual(server.passate_whisper(1.5, rapido_esiste=False), [("preciso", True)])
+
+    def test_pulizia(self):
+        self.assertEqual(server.pulisci_trascrizione("*Ahh*"), "Ahh")
+        self.assertEqual(server.pulisci_trascrizione("[Musica]"), "")
+        self.assertEqual(server.pulisci_trascrizione("B per prova (2)."), "B per prova .")
+
+    def test_ahh_vale_a(self):
+        self.assertEqual(modulo_cervello.LETTERE_SENTITE.get("ahh"), "a")
+
+
 class TestCollaudoNelCervello(BaseCiro):
     def collega(self):
         server._cervello.collaudo = modulo_collaudo.Collaudo(
