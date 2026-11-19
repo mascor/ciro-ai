@@ -62,7 +62,7 @@ NO_RE = re.compile(r"^(no|annulla|lascia stare|non mandarlo|ferma|aspetta)\b")
 # Portachiavi (servizio ciro-deepseek) o da DEEPSEEK_API_KEY e non va mai
 # negli argomenti, nei log o nella conversazione.
 DEEPSEEK_URL = os.environ.get("CIRO_DEEPSEEK_URL") or "https://api.deepseek.com/chat/completions"
-MODELLO_DIRETTO = os.environ.get("CIRO_MODELLO_DIRETTO") or "deepseek-chat"
+MODELLO_DIRETTO = os.environ.get("CIRO_MODELLO_DIRETTO") or "deepseek-flash"   # alias of the latest Flash
 _chiave_cache = {"valore": None, "letta": 0.0}
 
 

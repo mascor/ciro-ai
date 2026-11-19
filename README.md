@@ -196,7 +196,8 @@ Everything has a default; these environment variables change it:
 | `CIRO_UTENTE` | your first name, so Ciro can address you | none ("the user") |
 | `CIRO_NOMI_UTENTE` | names that mean "you" in the sessions' waiting lines, comma separated | `CIRO_UTENTE` |
 | `CIRO_PYTHON` | Python with `kokoro-onnx` | `~/.local/share/kokoro/venv/bin/python` |
-| `FACCIA_MODELLO` | OpenCode model for free conversation | `deepseek/deepseek-flash` |
+| `CIRO_MODELLO_DIRETTO` | DeepSeek API model, used when a key is in the Keychain (`ciro-deepseek`) or in `DEEPSEEK_API_KEY` | `deepseek-flash` |
+| `FACCIA_MODELLO` | OpenCode model, used when there is no key or the API does not answer | `deepseek/deepseek-flash` |
 | `FACCIA_VELOCITA` | voice speed | `1.1` |
 | `FACCIA_PORTA` | local port | `8765` |
 | `POSTA_RADICE` | mailbox folder | `~/.posta-agenti` |
