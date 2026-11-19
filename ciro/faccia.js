@@ -1,0 +1,1052 @@
+// Faccia parlante: ascolta dal microfono (whisper sul Mac), parla con la voce
+// Kokoro e muove la bocca seguendo il suono vero. Nessun servizio esterno.
+"use strict";
+
+const scena = document.getElementById("scena");
+const bocca = document.getElementById("bocca");
+const sorriso = document.getElementById("sorriso");
+const cranio = document.getElementById("cranio");
+const testa = document.getElementById("testa");
+const occhioSx = document.getElementById("occhio-sx");
+const occhioDx = document.getElementById("occhio-dx");
+const pupillaSx = document.getElementById("pupilla-sx");
+const pupillaDx = document.getElementById("pupilla-dx");
+const sopracciglia = document.getElementById("sopracciglia");
+const stato = document.getElementById("stato");
+const avvio = document.getElementById("avvio");
+const bottoneAvvio = document.getElementById("bottone-avvio");
+const chat = document.getElementById("chat");
+const chatLista = document.getElementById("chat-lista");
+const chatForm = document.getElementById("chat-form");
+const chatTesto = document.getElementById("chat-testo");
+const apriChat = document.getElementById("apri-chat");
+const chiudiChat = document.getElementById("chiudi-chat");
+const interruttore = document.getElementById("interruttore");
+const interruttoreTesto = document.getElementById("interruttore-testo");
+const pannelloConsumi = document.getElementById("pannello-consumi");
+
+// ---------------------------------------------------------------- animazione
+let fase = "pronto";        // pronto | ascolto | penso | parlo
+let livelloVoce = 0;        // 0..1 ampiezza della voce in uscita
+let livelloMicrofono = 0;   // 0..1 ampiezza di chi parla
+let apertura = 0;           // apertura bocca morbida
+let blink = 1;              // 1 occhi aperti, 0 chiusi
+let prossimoBlink = performance.now() + 2200;
+let sguardo = { x: 0, y: 0 };
+let sguardoBersaglio = { x: 0, y: 0 };
+
+// ---------------------------------------------------------- accesa / dorme
+let sveglia = false;                     // false: dorme
+let ultimaAttivita = performance.now();
+let richiami = 0;                        // promemoria fatti da quando si e' svegliato
+const ATTESA_RICHIAMO = 5 * 60 * 1000;   // cinque minuti senza essere usata
+const FRASI_RICHIAMO = [
+  "Sono qui, mi hai lasciato acceso.",
+  "Ehi, ci sei? Sono ancora sveglio.",
+  "Ti ricordo che sono acceso: se non ti servo, spegnimi.",
+];
+let inclinazione = 0;
+let inclinazioneBersaglio = 0;
+let spostamentoX = 0;
+let spostamentoXBersaglio = 0;
+let prossimoMovimento = 0;
+scena.classList.add("dorme"); // si parte spenta, sotto la scheda "Inizia"
+
+function disegnaBocca(ap, larghezza) {
+  const cx = 210, cy = 208, hw = 30 * larghezza;
+  const altezza = 2 + ap * 22;
+  const sotto = cy + altezza * 1.45;
+  const sopra = cy - altezza * 0.5;
+  bocca.setAttribute(
+    "d",
+    `M ${cx - hw} ${cy} Q ${cx} ${sotto} ${cx + hw} ${cy} Q ${cx} ${sopra} ${cx - hw} ${cy} Z`
+  );
+  // la linea del sorriso si vede solo a bocca chiusa
+  sorriso.style.opacity = Math.max(0, 1 - ap * 7).toFixed(2);
+}
+
+function impostaFase(nuova) {
+  if (!sveglia) {
+    scena.classList.remove("ascolta", "parla");
+    stato.textContent = "Dormo…";
+    return;
+  }
+  if (fase === nuova) return;
+  fase = nuova;
+  scena.classList.toggle("ascolta", nuova === "ascolto");
+  scena.classList.toggle("parla", nuova === "parlo");
+  sopracciglia.classList.toggle("su", nuova === "ascolto" || nuova === "penso");
+  stato.textContent = {
+    pronto: "Pronto",
+    ascolto: "Ti ascolto",
+    penso: "Un attimo",
+    parlo: "Parlo io",
+  }[nuova];
+}
+
+function anima(adesso) {
+  // respiro: quando dorme e' piu' lento e piu' profondo
+  const respiro = 1 + Math.sin(adesso / (sveglia ? 2200 : 4600)) * (sveglia ? 0.006 : 0.009);
+  const oscillazione = Math.sin(adesso / (sveglia ? 3400 : 5200)) * (sveglia ? 1.6 : 2.4);
+
+  // testa: piccoli movimenti per attirare l'attenzione, o appoggiata quando dorme
+  if (!sveglia) {
+    inclinazioneBersaglio = -5;
+    spostamentoXBersaglio = 0;
+  } else if (adesso > prossimoMovimento) {
+    inclinazioneBersaglio = (Math.random() * 2 - 1) * 2.6;
+    spostamentoXBersaglio = (Math.random() * 2 - 1) * 3.5;
+    prossimoMovimento = adesso + 2600 + Math.random() * 4200;
+  }
+  const morbidezza = sveglia ? 0.035 : 0.02;
+  inclinazione += (inclinazioneBersaglio - inclinazione) * morbidezza;
+  spostamentoX += (spostamentoXBersaglio - spostamentoX) * morbidezza;
+
+  // bocca: segue la voce, oppure il microfono, oppure resta chiusa
+  let bersaglio = 0;
+  if (!sveglia) bersaglio = 0;
+  else if (fase === "parlo") bersaglio = Math.min(1, livelloVoce * 1.25);
+  // mentre ascolta la bocca resta ferma: si muove solo quando parla Ciro
+  else if (fase === "penso") bersaglio = 0.12 + Math.sin(adesso / 260) * 0.05;
+
+  // attacco rapido, rilascio morbido: si vede la bocca muoversi sulle sillabe
+  const velocita = bersaglio > apertura ? 0.55 : 0.28;
+  apertura += (bersaglio - apertura) * velocita;
+
+  const larghezza = fase === "pronto" || !sveglia ? 1 : 1 + apertura * 0.12;
+  disegnaBocca(apertura, larghezza);
+
+  // occhi: sguardo che insegue il mouse, ammicco ogni tanto
+  sguardo.x += (sguardoBersaglio.x - sguardo.x) * 0.12;
+  sguardo.y += (sguardoBersaglio.y - sguardo.y) * 0.12;
+  const s = `translate(${sguardo.x}px, ${sguardo.y}px)`;
+  pupillaSx.style.transform = s;
+  pupillaDx.style.transform = s;
+
+  if (sveglia && adesso > prossimoBlink && fase !== "parlo") {
+    blink = 0;
+    if (adesso > prossimoBlink + 110) {
+      blink = 1;
+      prossimoBlink = adesso + 2400 + Math.random() * 3800;
+    }
+  }
+  const aperturaOcchi = sveglia
+    ? Math.max(0.05, blink) * (fase === "ascolto" ? 1.06 : 1)
+    : 0.05;
+  occhioSx.style.transform = `scale(1, ${aperturaOcchi})`;
+  occhioDx.style.transform = `scale(1, ${aperturaOcchi})`;
+
+  const abbassamento = sveglia ? 0 : 5;
+  testa.setAttribute(
+    "transform",
+    `translate(${spostamentoX.toFixed(2)} ${(oscillazione + abbassamento).toFixed(2)}) ` +
+      `rotate(${inclinazione.toFixed(2)} 210 250) scale(${respiro.toFixed(4)})`
+  );
+  requestAnimationFrame(anima);
+}
+
+requestAnimationFrame(anima);
+
+// ------------------------------------------------------------- audio in uscita
+const ctxUscita = new (window.AudioContext || window.webkitAudioContext)();
+const analizzatore = ctxUscita.createAnalyser();
+analizzatore.fftSize = 1024;
+analizzatore.smoothingTimeConstant = 0.55;
+analizzatore.connect(ctxUscita.destination);
+let campioniUscita = new Uint8Array(analizzatore.fftSize);
+let sorgente = null;
+
+function leggiUscita() {
+  if (fase !== "parlo") {
+    livelloVoce *= 0.9;
+    return;
+  }
+  analizzatore.getByteTimeDomainData(campioniUscita);
+  let somma = 0;
+  for (let i = 0; i < campioniUscita.length; i++) {
+    const v = (campioniUscita[i] - 128) / 128;
+    somma += v * v;
+  }
+  const rms = Math.sqrt(somma / campioniUscita.length);
+  livelloVoce += (Math.min(1, rms * 4.2) - livelloVoce) * 0.5;
+}
+
+const orologioUscita = setInterval(leggiUscita, 33);
+
+// --------------------------------------------- registro degli eventi (bug)
+// Tutto finisce in ~/.config/faccia/conversazioni.log insieme a quello che
+// Ciro sente e dice: con l'ora del problema si ricostruisce cosa e' successo.
+function evento(tipo, dettaglio) {
+  try {
+    fetch("/api/evento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo, dettaglio: String(dettaglio || "") }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (errore) { /* il registro non deve mai fermare Ciro */ }
+}
+
+// ------------------------------------------------------------- coda della voce
+const coda = [];
+let inCorso = false;
+
+// sottotitoli sotto il personaggio: l'ultima frase tua e l'ultima di Ciro
+function sottotitolo(chi, testo) {
+  const riga = document.getElementById(chi === "io" ? "sotto-tu" : "sotto-ciro");
+  if (!riga) return;
+  const pulito = (testo || "").trim();
+  riga.querySelector("span").textContent = pulito;
+  riga.classList.toggle("vuoto", !pulito);
+}
+
+function di(testo) {
+  const pulito = (testo || "").trim();
+  if (pulito && (sveglia || muto)) sottotitolo("ciro", pulito); // anche se zitto: la leggi
+  if (!pulito || !sveglia || muto) return; // spento o zitto: resta solo nella chat
+  coda.push(pulito);
+  if (!inCorso) prossimo();
+}
+
+async function prossimo() {
+  if (!coda.length) {
+    inCorso = false;
+    if (fase === "parlo") impostaFase(micAttivo ? "ascolto" : "pronto");
+    return;
+  }
+  inCorso = true;
+  const testo = coda.shift();
+  try {
+    const risposta = await fetch("/api/parla", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ testo }),
+    });
+    if (!risposta.ok) throw new Error("voce non disponibile");
+    const byte = await risposta.arrayBuffer();
+    const audio = await ctxUscita.decodeAudioData(byte);
+    await riproduci(audio);
+  } catch (errore) {
+    console.warn(errore);
+    evento("errore-voce", errore && errore.message);
+    stato.textContent = "Voce non disponibile";
+  }
+  prossimo();
+}
+
+function riproduci(audio) {
+  return new Promise((risolvi) => {
+    impostaFase("parlo");
+    sospeso = true; // mentre parla il microfono ascolta solo per le interruzioni
+    inizioVoceCiro = performance.now();
+    eco = 0;
+    fotogrammiSopra = 0;
+    sorgente = ctxUscita.createBufferSource();
+    sorgente.buffer = audio;
+    sorgente.connect(analizzatore);
+    sorgente.onended = () => {
+      sorgente = null;
+      sospeso = false;
+      livelloVoce = 0;
+      risolvi();
+    };
+    sorgente.start();
+  });
+}
+
+// ------------------------------------------------------ fischi e richiami
+let muto = false; // voce spenta dal Mac (~/.config/faccia/muto)
+
+function fischia() {
+  if (!sveglia || muto) return;
+  const adesso = ctxUscita.currentTime;
+  const oscillatore = ctxUscita.createOscillator();
+  const volume = ctxUscita.createGain();
+  oscillatore.type = "sine";
+  oscillatore.frequency.setValueAtTime(1150, adesso);
+  oscillatore.frequency.exponentialRampToValueAtTime(1680, adesso + 0.14);
+  oscillatore.frequency.exponentialRampToValueAtTime(1380, adesso + 0.3);
+  volume.gain.setValueAtTime(0.0001, adesso);
+  volume.gain.linearRampToValueAtTime(0.07, adesso + 0.05);
+  volume.gain.exponentialRampToValueAtTime(0.0001, adesso + 0.36);
+  oscillatore.connect(volume).connect(ctxUscita.destination);
+  oscillatore.start(adesso);
+  oscillatore.stop(adesso + 0.38);
+  // piccolo scatto della testa, così si nota anche senza audio
+  inclinazioneBersaglio = (Math.random() * 2 - 1) * 5;
+  spostamentoXBersaglio = (Math.random() * 2 - 1) * 4;
+}
+
+function segnalaAttivita() {
+  ultimaAttivita = performance.now();
+  richiami = 0;
+}
+
+function controllaInattivita() {
+  if (!sveglia) return;
+  if (performance.now() - ultimaAttivita < ATTESA_RICHIAMO) return;
+  ultimaAttivita = performance.now();
+  if (richiami % 2 === 0) {
+    fischia(); // primo richiamo: fischio breve
+  } else {
+    const frase = FRASI_RICHIAMO[Math.floor(richiami / 2) % FRASI_RICHIAMO.length];
+    di(frase); // poi anche a voce, se continua a non essere usata
+  }
+  richiami++;
+}
+
+setInterval(controllaInattivita, 3000);
+
+// ------------------------------------------------------ accesa / dorme
+function accendi(saluta) {
+  if (sveglia) return;
+  sveglia = true;
+  evento("acceso", saluta === false ? "senza saluto" : "");
+  interruttore.classList.add("acceso");
+  interruttore.setAttribute("aria-pressed", "true");
+  interruttoreTesto.textContent = "Acceso";
+  scena.classList.remove("dorme");
+  segnalaAttivita();
+  impostaFase("ascolto");
+  ctxUscita.resume().catch(() => {});
+  accendiMicrofono().catch((errore) => {
+    evento("errore-microfono", errore && errore.message);
+    stato.textContent = "Microfono non disponibile";
+  });
+  if (saluta !== false) di("Echo, sono sveglio.");
+}
+
+function spegni() {
+  if (!sveglia) return;
+  sveglia = false;
+  evento("spento", "");
+  interruttore.classList.remove("acceso");
+  interruttore.setAttribute("aria-pressed", "false");
+  interruttoreTesto.textContent = "Spento";
+  scena.classList.add("dorme");
+  coda.length = 0; // niente frasi in sospeso mentre dorme
+  if (sorgente) {
+    try { sorgente.stop(); } catch (errore) { /* gia' finita */ }
+  }
+  spegniMicrofono();
+  sospeso = false;
+  attesaInvio = false;
+  parlando = false;
+  fase = "pronto";
+  stato.textContent = "Dormo…";
+}
+
+interruttore.addEventListener("click", () => {
+  if (sveglia) spegni();
+  else accendi();
+});
+
+// ----------------------------------------------------------------- microfono
+const FREQUENZA = 16000;
+let micAttivo = false;
+let ctxRec = null;
+let flusso = null;
+let nodoRec = null;
+let sospeso = false;      // true mentre la faccia parla
+let bufferIngresso = [];  // pezzi Float32 del discorso in corso
+let parlando = false;
+let ultimoSuono = 0;
+let inizioDiscorso = 0;
+let rumore = 0.004;
+let attesaInvio = false;
+const PRE_ROLL = [];      // 350 ms prima che si capisca che stai parlando
+
+async function accendiMicrofono() {
+  if (micAttivo) return;
+  flusso = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+  });
+  ctxRec = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: FREQUENZA });
+  await ctxRec.resume();
+  const sorgenteMic = ctxRec.createMediaStreamSource(flusso);
+  nodoRec = ctxRec.createScriptProcessor(2048, 1, 1);
+  nodoRec.onaudioprocess = (evento) => {
+    const dati = evento.inputBuffer.getChannelData(0);
+    esaminaMicrofono(dati);
+  };
+  sorgenteMic.connect(nodoRec);
+  nodoRec.connect(ctxRec.destination); // serve al browser per far girare il nodo
+  micAttivo = true;
+  impostaFase("ascolto");
+}
+
+function esaminaMicrofono(dati) {
+  let somma = 0;
+  for (let i = 0; i < dati.length; i++) somma += dati[i] * dati[i];
+  const rms = Math.sqrt(somma / dati.length);
+  const adesso = performance.now();
+
+  if (sospeso) {
+    // Ciro sta parlando: il microfono resta acceso per sentire se lo interrompi.
+    // La sua voce rientra un po' dagli altoparlanti (eco): la soglia sale con
+    // il volume di Ciro e con l'eco misurata all'inizio di ogni sua frase.
+    PRE_ROLL.push(new Float32Array(dati));
+    if (PRE_ROLL.length > 12) PRE_ROLL.shift();
+    livelloMicrofono *= 0.85;
+    const daQuando = adesso - inizioVoceCiro;
+    if (daQuando < 600) {
+      if (livelloVoce > 0.05) eco = Math.max(eco, rms / livelloVoce);
+      return;
+    }
+    const sogliaInterruzione = Math.max(0.03, rumore * 8, eco * livelloVoce * 1.8);
+    fotogrammiSopra = rms > sogliaInterruzione ? fotogrammiSopra + 1 : 0;
+    if (fotogrammiSopra >= 3) interrompiCiro(adesso); // circa 0,4 s di voce tua
+    return;
+  }
+  if (attesaInvio) {
+    livelloMicrofono *= 0.85;
+    return;
+  }
+
+  livelloMicrofono += (Math.min(1, rms * 6) - livelloMicrofono) * 0.35;
+  const soglia = Math.max(0.011, rumore * 3);
+
+  if (!parlando && rms < soglia) {
+    rumore = rumore * 0.98 + rms * 0.02; // impara il rumore di fondo
+  }
+
+  if (!parlando && rms > soglia) {
+    parlando = true;
+    inizioDiscorso = adesso;
+    bufferIngresso = PRE_ROLL.slice();
+    ultimoSuono = adesso;
+    segnalaAttivita();
+  }
+
+  if (parlando) {
+    bufferIngresso.push(new Float32Array(dati));
+    if (rms > soglia) ultimoSuono = adesso;
+    const troppoLungo = adesso - inizioDiscorso > 45000;
+    if (adesso - ultimoSuono > 900 || troppoLungo) {
+      parlando = false;
+      attesaInvio = true;
+      const pezzi = bufferIngresso;
+      bufferIngresso = [];
+      PRE_ROLL.length = 0;
+      inviaDiscorso(pezzi).finally(() => {
+        attesaInvio = false;
+      });
+    }
+  } else {
+    PRE_ROLL.push(new Float32Array(dati));
+    if (PRE_ROLL.length > 12) PRE_ROLL.shift();
+  }
+}
+
+// Lo interrompi: smette subito di parlare, butta le frasi in coda e ascolta.
+let eco = 0;
+let fotogrammiSopra = 0;
+let inizioVoceCiro = 0;
+
+function interrompiCiro(adesso) {
+  evento("interruzione", "eco " + eco.toFixed(3) + ", frasi scartate " + coda.length);
+  fotogrammiSopra = 0;
+  coda.length = 0;
+  if (sorgente) {
+    try { sorgente.stop(); } catch (errore) { /* gia' finita */ }
+  }
+  sospeso = false;
+  livelloVoce = 0;
+  impostaFase("ascolto");
+  parlando = true;               // il tuo discorso e' gia' cominciato
+  inizioDiscorso = adesso;
+  ultimoSuono = adesso;
+  bufferIngresso = PRE_ROLL.slice();
+  segnalaAttivita();
+}
+
+function codificaWav(pezzi, frequenza) {
+  let totale = 0;
+  for (const p of pezzi) totale += p.length;
+  const dati = new Float32Array(totale);
+  let posizione = 0;
+  for (const p of pezzi) {
+    dati.set(p, posizione);
+    posizione += p.length;
+  }
+  const buffer = new ArrayBuffer(44 + totale * 2);
+  const vista = new DataView(buffer);
+  const scrivi = (offset, testo) => {
+    for (let i = 0; i < testo.length; i++) vista.setUint8(offset + i, testo.charCodeAt(i));
+  };
+  scrivi(0, "RIFF");
+  vista.setUint32(4, 36 + totale * 2, true);
+  scrivi(8, "WAVE");
+  scrivi(12, "fmt ");
+  vista.setUint32(16, 16, true);
+  vista.setUint16(20, 1, true);
+  vista.setUint16(22, 1, true);
+  vista.setUint32(24, frequenza, true);
+  vista.setUint32(28, frequenza * 2, true);
+  vista.setUint16(32, 2, true);
+  vista.setUint16(34, 16, true);
+  scrivi(36, "data");
+  vista.setUint32(40, totale * 2, true);
+  let offset = 44;
+  for (let i = 0; i < totale; i++, offset += 2) {
+    const v = Math.max(-1, Math.min(1, dati[i]));
+    vista.setInt16(offset, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return buffer;
+}
+
+async function inviaDiscorso(pezzi) {
+  if (!pezzi.length || !ctxRec) return;
+  const campioni = pezzi.reduce((totale, p) => totale + p.length, 0);
+  if (campioni < ctxRec.sampleRate * 0.6) { // meno di 0,6 s: un rumore, non una frase
+    evento("rumore-ignorato", (campioni / ctxRec.sampleRate).toFixed(2) + " s");
+    return;
+  }
+  const wav = codificaWav(pezzi, ctxRec.sampleRate);
+  impostaFase("penso");
+  try {
+    const risposta = await fetch("/api/ascolta", {
+      method: "POST",
+      headers: { "Content-Type": "audio/wav" },
+      body: wav,
+    });
+    if (!risposta.ok) throw new Error("trascrizione fallita");
+    const { testo } = await risposta.json();
+    if (!testo || testo.trim().length < 2) {
+      impostaFase("ascolto");
+      return;
+    }
+    aggiungiMessaggio("io", testo);
+    impostaFase("ascolto");
+    segnalaAttivita();
+    await chiediAlCervello(testo);
+  } catch (errore) {
+    console.warn(errore);
+    evento("errore-ascolto", errore && errore.message);
+    stato.textContent = "Non ho capito";
+    setTimeout(() => impostaFase(micAttivo ? "ascolto" : "pronto"), 1500);
+  }
+}
+
+// Il cervello: OpenCode con il quadro delle sessioni e della posta.
+async function chiediAlCervello(testo) {
+  impostaFase("penso");
+  try {
+    const risposta = await fetch("/api/cervello", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ testo }),
+    });
+    if (!risposta.ok) throw new Error("cervello non disponibile");
+    const dato = await risposta.json();
+    const frase = (dato.risposta || "").trim();
+    if (!frase) { // solo un grazie o un saluto: Ciro non risponde
+      sottotitolo("ciro", "");
+      impostaFase(micAttivo ? "ascolto" : "pronto");
+      return;
+    }
+    aggiungiMessaggio("lui", frase);
+    di(frase);
+    aggiornaQuadro();
+  } catch (errore) {
+    console.warn(errore);
+    evento("errore-cervello", errore && errore.message);
+    di(rispostaProvvisoria(testo));
+  }
+}
+
+// Risposta di riserva, se il cervello non risponde.
+function rispostaProvvisoria(testo) {
+  const pulito = testo.trim().replace(/\s+/g, " ");
+  if (/\?\s*$/.test(pulito)) {
+    return "In questo momento non riesco a pensare. Riprova tra un attimo.";
+  }
+  return "Ho sentito: " + pulito;
+}
+
+// ------------------------------------------------------------------- la chat
+function aggiungiMessaggio(chi, testo) {
+  if (chi === "io") {
+    sottotitolo("io", testo);
+    sottotitolo("ciro", "…");
+  }
+  const riga = document.createElement("div");
+  riga.className = "riga " + chi;
+  const fumetto = document.createElement("div");
+  fumetto.className = "fumetto";
+  fumetto.textContent = testo;
+  riga.appendChild(fumetto);
+  chatLista.appendChild(riga);
+  chatLista.scrollTop = chatLista.scrollHeight;
+}
+
+chatForm.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  const testo = chatTesto.value.trim();
+  if (!testo) return;
+  chatTesto.value = "";
+  if (!sveglia) accendi(false); // scriverle la sveglia
+  aggiungiMessaggio("io", testo);
+  segnalaAttivita();
+  chiediAlCervello(testo);
+});
+
+apriChat.addEventListener("click", () => {
+  chat.classList.toggle("aperta");
+  if (chat.classList.contains("aperta")) chatTesto.focus();
+});
+
+chiudiChat.addEventListener("click", () => chat.classList.remove("aperta"));
+
+document.addEventListener("keydown", (evento) => {
+  if (evento.key === "Escape") chat.classList.remove("aperta");
+  if (document.activeElement === chatTesto) return;
+  segnalaAttivita();
+  const tasto = evento.key.toLowerCase();
+  if (evento.metaKey || evento.ctrlKey) return;
+  if (tasto === "s") {
+    sveglia ? spegni() : accendi();
+  } else if (tasto === "m") {
+    if (!sveglia) accendi();
+    else if (micAttivo) spegniMicrofono();
+    else accendiMicrofono();
+  }
+});
+
+document.addEventListener("pointerdown", segnalaAttivita);
+
+function spegniMicrofono() {
+  if (nodoRec) nodoRec.disconnect();
+  if (flusso) flusso.getTracks().forEach((traccia) => traccia.stop());
+  if (ctxRec) ctxRec.close().catch(() => {}); // Chrome regge pochi contesti audio
+  nodoRec = null;
+  flusso = null;
+  ctxRec = null;
+  parlando = false;
+  bufferIngresso = [];
+  PRE_ROLL.length = 0;
+  micAttivo = false;
+  impostaFase("pronto");
+}
+
+// ------------------------------------------------- fine dell'ascolto, avvio
+bottoneAvvio.addEventListener("click", async () => {
+  avvio.classList.remove("visibile");
+  await ctxUscita.resume();
+  accendi();
+});
+
+// ------------------------------------------- aggiornamento automatico
+// Quando arriva una versione nuova (file della pagina cambiati o server
+// riavviato) la pagina si ricarica da sola, ma non mentre Ciro parla o pensa
+// o mentre stai scrivendo; dopo il ricaricamento torna com'era.
+const CHIAVE_RIAVVIO = "ciro-riavvio";
+let versioneCaricata = null;
+
+async function controllaVersione() {
+  try {
+    const risposta = await fetch("/api/versione", { cache: "no-store" });
+    if (!risposta.ok) return;
+    const { versione } = await risposta.json();
+    if (versioneCaricata === null) {
+      versioneCaricata = versione;
+      return;
+    }
+    if (versione === versioneCaricata) return;
+    const occupato = fase === "parlo" || fase === "penso" || inCorso || parlando ||
+      (document.activeElement === chatTesto && chatTesto.value.trim());
+    if (occupato) return; // riprovo al giro dopo
+    try {
+      sessionStorage.setItem(CHIAVE_RIAVVIO, JSON.stringify({
+        sveglia, microfono: micAttivo, chat: chat.classList.contains("aperta"),
+      }));
+    } catch (errore) { /* senza memoria del browser riparte dalla schermata iniziale */ }
+    evento("ricarica", "versione " + versione);
+    location.reload();
+  } catch (errore) {
+    /* server fermo o in riavvio: riprovo al giro dopo */
+  }
+}
+setInterval(controllaVersione, 3000);
+controllaVersione();
+
+(function riprendiDopoAggiornamento() {
+  let stato = null;
+  try {
+    stato = JSON.parse(sessionStorage.getItem(CHIAVE_RIAVVIO) || "null");
+    sessionStorage.removeItem(CHIAVE_RIAVVIO);
+  } catch (errore) { return; }
+  if (!stato) return;
+  avvio.classList.remove("visibile");
+  if (stato.chat) chat.classList.add("aperta");
+  if (!stato.sveglia) return;
+  accendi(false);
+  if (!stato.microfono) spegniMicrofono();
+  // se il browser blocca l'audio senza un clic, riparte al primo clic o tasto
+  ctxUscita.resume().catch(() => {});
+  const sblocca = () => ctxUscita.resume().catch(() => {});
+  window.addEventListener("pointerdown", sblocca, { once: true });
+  window.addEventListener("keydown", sblocca, { once: true });
+})();
+
+// Il mouse sposta lo sguardo: la faccia sembra viva.
+window.addEventListener("mousemove", (evento) => {
+  const x = (evento.clientX / window.innerWidth - 0.5) * 8;
+  const y = (evento.clientY / window.innerHeight - 0.5) * 6;
+  sguardoBersaglio = { x: Math.max(-4, Math.min(4, x)), y: Math.max(-3, Math.min(3, y)) };
+});
+
+// ------------------------------------------------------------ pannello laterale
+const pannelloAttese = document.getElementById("pannello-attese");
+const contaAttese = document.getElementById("conta-attese");
+
+function testoAttesa(secondi) {
+  const minuti = Math.round((secondi || 0) / 60);
+  if (minuti < 1) return "adesso";
+  if (minuti < 60) return `da ${minuti} min`;
+  const ore = Math.floor(minuti / 60);
+  return ore < 24 ? `da ${ore} h ${minuti % 60} min` : `da ${Math.floor(ore / 24)} g`;
+}
+
+function disegnaAttese(elenco) {
+  pannelloAttese.innerHTML = "";
+  contaAttese.textContent = elenco.length ? `(${elenco.length})` : "";
+  if (!elenco.length) {
+    const vuoto = document.createElement("li");
+    vuoto.className = "vuoto";
+    vuoto.textContent = "nessuno: tutto in ordine";
+    pannelloAttese.appendChild(vuoto);
+    return;
+  }
+  for (const attesa of elenco) {
+    const riga = document.createElement("li");
+    riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : "posta");
+    riga.title = "Clicca per rispondere a " + attesa.progetto;
+    const testa = document.createElement("div");
+    testa.className = "attesa-testa";
+    const progetto = document.createElement("b");
+    progetto.textContent = attesa.progetto || "?";
+    const quando = document.createElement("span");
+    quando.textContent = `${attesa.tipo} · ${testoAttesa(attesa.secondi)}`;
+    testa.append(progetto, quando);
+    const testo = document.createElement("p");
+    testo.textContent = attesa.testo;
+    riga.append(testa, testo);
+    // clic: apre la chat pronta per rispondere a quella sessione tramite Ciro
+    riga.addEventListener("click", () => {
+      chat.classList.add("aperta");
+      chatTesto.value = `Di' a ${attesa.progetto}: `;
+      chatTesto.focus();
+    });
+    pannelloAttese.appendChild(riga);
+  }
+}
+
+// ------------------------------------------- colonna destra: le sessioni
+const pannelloSessioni = document.getElementById("pannello-sessioni");
+const contaSessioni = document.getElementById("conta-sessioni");
+
+function disegnaSessioni(elenco) {
+  pannelloSessioni.innerHTML = "";
+  contaSessioni.textContent = elenco.length ? `(${elenco.length})` : "";
+  if (!elenco.length) {
+    const vuoto = document.createElement("li");
+    vuoto.className = "vuoto";
+    vuoto.textContent = "nessuna sessione aperta";
+    pannelloSessioni.appendChild(vuoto);
+    return;
+  }
+  for (const sessione of elenco) {
+    const riga = document.createElement("li");
+    riga.className = sessione.stato === "aspetta te" ? "attende" : sessione.stato === "al lavoro" ? "lavora" : "";
+    const pallino = document.createElement("span");
+    pallino.className = "pallino-sessione";
+    const dati = document.createElement("div");
+    dati.className = "dati";
+    const nome = document.createElement("span");
+    nome.className = "nome";
+    if (sessione.proprietario) {
+      // stesso proprietario, stessa tinta (chiara: il testo resta leggibile)
+      riga.style.setProperty("--tinta", tintaDi(sessione.proprietario));
+      riga.classList.add("con-proprietario");
+      const proprietario = document.createElement("span");
+      proprietario.className = "proprietario";
+      proprietario.textContent = sessione.proprietario + "/";
+      nome.append(proprietario, document.createTextNode(sessione.repo));
+    } else {
+      nome.textContent = sessione.titolo || sessione.progetto;
+    }
+    riga.title = (sessione.titolo || sessione.progetto) + " · cartella " + sessione.progetto;
+    const mini = document.createElement("span");
+    mini.className = "mini";
+    mini.textContent = `${sessione.stato} · ${testoAttesa(sessione.secondi)}`;
+    dati.append(nome, mini);
+    if (sessione.sintesi) {
+      const sintesi = document.createElement("span");
+      sintesi.className = "domanda";
+      sintesi.textContent = sessione.sintesi;
+      dati.append(sintesi);
+    }
+    riga.append(pallino, dati);
+    pannelloSessioni.appendChild(riga);
+  }
+  adattaSessioni();
+}
+
+function tintaDi(testo) {
+  let h = 0;
+  for (const c of testo.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return String(h);
+}
+
+// Tutte le sessioni sempre visibili, senza scorrere: prima riduco le righe di
+// sintesi da 3 a 1, poi la grandezza del testo (da 15 px fino a 8 px).
+const pannelloDestra = document.getElementById("pannello-destra");
+function adattaSessioni() {
+  const entra = () => pannelloSessioni.scrollHeight <= pannelloSessioni.clientHeight + 1;
+  const prove = [];
+  for (const righe of [3, 2]) prove.push([15, righe]);
+  for (let px = 15; px >= 8; px -= 0.5) prove.push([px, 1]);
+  for (const [px, righe] of prove) {
+    pannelloSessioni.style.fontSize = px + "px";
+    pannelloSessioni.style.setProperty("--righe", righe);
+    if (entra()) return;
+  }
+}
+window.addEventListener("resize", adattaSessioni);
+
+function disegnaQuadro(dati) {
+  disegnaConsumi(dati.consumi || []);
+  disegnaAttese(dati.attese || []);
+  disegnaSessioni(dati.sessioni || []);
+  // dopo un ricaricamento: una credenziale ancora chiesta riapre il campo
+  const credenziale = (dati.attese || []).find((a) => a.operazione === "credenziali" && a.domanda_id);
+  if (credenziale) mostraCredenziale(credenziale);
+}
+
+// ------------------------------------------------ campo per le credenziali
+// Il valore va solo al server, che lo mette nel Portachiavi: non si dice,
+// non si scrive nei sottotitoli e il campo si svuota subito dopo l'invio.
+const moduloCredenziale = document.getElementById("credenziale");
+const chiuseCredenziali = new Set();
+let credenzialeAperta = null;
+
+function mostraCredenziale(domanda) {
+  if (credenzialeAperta === domanda.domanda_id || chiuseCredenziali.has(domanda.domanda_id)) return;
+  credenzialeAperta = domanda.domanda_id;
+  document.getElementById("credenziale-titolo").textContent =
+    "Credenziale per " + (domanda.progetto || "una sessione") + ": " + (domanda.testo || "");
+  document.getElementById("credenziale-prefisso").textContent = "ciro-" + (domanda.progetto || "") + "-";
+  document.getElementById("credenziale-nome").value = domanda.nome_credenziale || "";
+  document.getElementById("credenziale-valore").value = "";
+  document.getElementById("credenziale-esito").textContent = "";
+  moduloCredenziale.hidden = false;
+  document.getElementById("credenziale-valore").focus();
+}
+
+function chiudiCredenziale() {
+  document.getElementById("credenziale-valore").value = "";
+  if (credenzialeAperta) chiuseCredenziali.add(credenzialeAperta);
+  credenzialeAperta = null;
+  moduloCredenziale.hidden = true;
+}
+
+document.getElementById("credenziale-chiudi").addEventListener("click", chiudiCredenziale);
+moduloCredenziale.addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const campo = document.getElementById("credenziale-valore");
+  const esito = document.getElementById("credenziale-esito");
+  const corpo = JSON.stringify({
+    domanda_id: credenzialeAperta,
+    nome: document.getElementById("credenziale-nome").value.trim(),
+    valore: campo.value,
+  });
+  campo.value = "";
+  esito.textContent = "Salvo…";
+  try {
+    const risposta = await fetch("/api/credenziale", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: corpo,
+    });
+    const dati = await risposta.json().catch(() => ({}));
+    if (risposta.ok) {
+      chiudiCredenziale();
+      aggiornaQuadro();
+    } else {
+      esito.textContent = "Non salvata: " + (dati.errore || risposta.status) + ". Riscrivila.";
+    }
+  } catch (errore) {
+    esito.textContent = "Il server non risponde. Riscrivila.";
+  }
+});
+
+const NOMI_FONTI = {
+  "claude-code": "Claude",
+  "claude.ai": "Claude",
+  "opencode-go": "OpenCode Go",
+  deepseek: "DeepSeek",
+};
+
+function testoReset(reset) {
+  if (!reset) return "";
+  let data = null;
+  if (/^\d+(\.\d+)?$/.test(reset)) {
+    const numero = Number(reset);
+    data = new Date(numero < 1e12 ? numero * 1000 : numero);
+  } else if (/^\d{4}-\d{2}-\d{2}/.test(reset)) {
+    data = new Date(reset);
+  }
+  if (!data || isNaN(data)) return reset; // gia' scritto a parole ("tra 3h 59m")
+  const minuti = Math.round((data - Date.now()) / 60000);
+  if (minuti <= 0) return "reset ora";
+  if (minuti < 60) return `reset tra ${minuti} min`;
+  const ore = Math.floor(minuti / 60);
+  if (ore < 48) return `reset tra ${ore} h ${minuti % 60} min`;
+  return `reset tra ${Math.floor(ore / 24)} g ${ore % 24} h`;
+}
+
+function testoEta(secondi) {
+  if (!secondi) return "";
+  const minuti = Math.round((Date.now() / 1000 - secondi) / 60);
+  if (minuti < 2) return "adesso";
+  if (minuti < 60) return `${minuti} min fa`;
+  return `${Math.round(minuti / 60)} h fa`;
+}
+
+function disegnaConsumi(elenco) {
+  pannelloConsumi.innerHTML = "";
+  if (!elenco.length) {
+    const vuoto = document.createElement("p");
+    vuoto.className = "vuoto";
+    vuoto.textContent = "nessun dato ancora: apri una sessione Claude Code o installa l'estensione Chrome";
+    pannelloConsumi.appendChild(vuoto);
+    return;
+  }
+  for (const consumo of elenco) {
+    const blocco = document.createElement("div");
+    blocco.className = "consumo";
+    const titolo = document.createElement("div");
+    titolo.className = "consumo-titolo";
+    const nome = document.createElement("span");
+    nome.textContent = `${NOMI_FONTI[consumo.fonte] || consumo.fonte} · ${consumo.account || ""}`;
+    const eta = document.createElement("span");
+    eta.className = "eta";
+    eta.textContent = testoEta(consumo.aggiornato);
+    titolo.append(nome, eta);
+    blocco.appendChild(titolo);
+
+    for (const voce of consumo.voci || []) {
+      const riga = document.createElement("div");
+      riga.className = "barra-consumo";
+      const etichetta = document.createElement("span");
+      etichetta.textContent = voce.nome || "";
+      const traccia = document.createElement("span");
+      traccia.className = "traccia";
+      // la barra mostra quanto resta: rossa dal 25% in giu', gialla dal 50%
+      const pieno = document.createElement("span");
+      const usato = Math.max(0, Math.min(100, Number(voce.percentuale) || 0));
+      const resta = 100 - usato;
+      pieno.style.width = resta + "%";
+      if (resta <= 25) {
+        pieno.className = "alto";
+        riga.classList.add("in-esaurimento");
+      } else if (resta <= 50) pieno.className = "medio";
+      traccia.appendChild(pieno);
+      const valore = document.createElement("b");
+      valore.textContent = voce.percentuale == null ? "—" : Math.round(resta) + "%";
+      const reset = document.createElement("small");
+      reset.textContent = testoReset(voce.reset);
+      riga.append(etichetta, traccia, valore, reset);
+      blocco.appendChild(riga);
+    }
+    if (consumo.saldo) {
+      const saldo = document.createElement("div");
+      saldo.className = "voce";
+      const etichetta = document.createElement("span");
+      etichetta.textContent = "Credito";
+      const valore = document.createElement("b");
+      valore.textContent = consumo.saldo;
+      saldo.append(etichetta, valore);
+      blocco.appendChild(saldo);
+    }
+    if (consumo.nota) {
+      const nota = document.createElement("div");
+      nota.className = "voce tenue";
+      nota.textContent = consumo.nota;
+      blocco.appendChild(nota);
+    }
+    pannelloConsumi.appendChild(blocco);
+  }
+  // gli account claude.ai (Contoso, Ironworks Pro) arrivano solo dall'estensione Chrome
+  const mancano = [];
+  if (!elenco.some((c) => c.fonte === "claude.ai")) mancano.push("gli altri account Claude");
+  if (!elenco.some((c) => c.fonte === "opencode-go")) mancano.push("OpenCode Go");
+  if (!elenco.some((c) => c.fonte === "deepseek")) mancano.push("DeepSeek");
+  if (mancano.length) {
+    const avviso = document.createElement("p");
+    avviso.className = "mancano";
+    avviso.textContent = "Mancano " + mancano.join(", ") + ": arrivano dall'estensione Chrome, da installare nei profili Contoso e Lavoro.";
+    pannelloConsumi.appendChild(avviso);
+  }
+}
+
+async function aggiornaQuadro() {
+  try {
+    const risposta = await fetch("/api/quadro", { cache: "no-store" });
+    if (!risposta.ok) return;
+    disegnaQuadro(await risposta.json());
+  } catch (errore) {
+    /* server non raggiungibile: riprovo al giro dopo */
+  }
+}
+
+// "Ti aspettano" deve sparire appena una richiesta e' gestita: giro ogni 3 s
+// (il server risponde in 0,1 s) e subito quando la finestra torna davanti,
+// perche' Chrome rallenta i timer delle finestre in secondo piano.
+setInterval(aggiornaQuadro, 3000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) aggiornaQuadro();
+});
+window.addEventListener("focus", aggiornaQuadro);
+aggiornaQuadro();
+
+// ------------------------------------------------- messaggi spinti da fuori
+async function controllaMessaggi() {
+  if (!sveglia) return; // se dorme restano in coda e li dice quando si sveglia
+  try {
+    const risposta = await fetch("/api/messaggi", { cache: "no-store" });
+    if (!risposta.ok) return;
+    const { messaggi, muto: zitto } = await risposta.json();
+    muto = Boolean(zitto);
+    for (const messaggio of messaggi) {
+      segnalaAttivita();
+      if (messaggio.operazione === "credenziali" && messaggio.domanda_id) {
+        mostraCredenziale({ domanda_id: messaggio.domanda_id, progetto: messaggio.progetto,
+                            testo: messaggio.testo, nome_credenziale: messaggio.nome_credenziale });
+      }
+      aggiungiMessaggio("lui", messaggio.testo);
+      di(messaggio.testo);
+    }
+  } catch (errore) {
+    /* server non raggiungibile: riprovo al giro dopo */
+  }
+}
+
+setInterval(controllaMessaggi, 1200);
+
+// API per chi vuole comandare la faccia da fuori (pagina o console)
+window.faccia = {
+  di,
+  parla: di,
+  ascolta: accendiMicrofono,
+  ferma: spegniMicrofono,
+  accendi,
+  spegni,
+  fischia,
+  quadro: aggiornaQuadro,
+  richiamo: () => {
+    ultimaAttivita = performance.now() - ATTESA_RICHIAMO - 1; // prova immediata
+    controllaInattivita();
+  },
+  accesa: () => sveglia,
+  stato: () => fase,
+};

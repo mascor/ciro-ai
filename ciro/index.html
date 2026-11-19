@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ciro Assistente AI</title>
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+
+<div id="scena">
+  <div class="alone"></div>
+
+  <svg id="faccia" viewBox="45 14 330 330" aria-hidden="true">
+    <defs>
+      <radialGradient id="pelle" cx="38%" cy="24%" r="80%">
+        <stop offset="0%" stop-color="#ffe3cc"/>
+        <stop offset="55%" stop-color="#f5c3a2"/>
+        <stop offset="100%" stop-color="#d89a79"/>
+      </radialGradient>
+      <radialGradient id="pelleScura" cx="50%" cy="30%" r="80%">
+        <stop offset="0%" stop-color="#edb491"/>
+        <stop offset="100%" stop-color="#c2826a"/>
+      </radialGradient>
+      <radialGradient id="guancia" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ff7f6b" stop-opacity=".38"/>
+        <stop offset="100%" stop-color="#ff7f6b" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="iride" cx="36%" cy="30%" r="76%">
+        <stop offset="0%" stop-color="#8fd8f0"/>
+        <stop offset="50%" stop-color="#3f83ad"/>
+        <stop offset="100%" stop-color="#16304a"/>
+      </radialGradient>
+      <linearGradient id="capelli" x1="0.1" y1="0" x2="0.5" y2="1">
+        <stop offset="0%" stop-color="#33405f"/>
+        <stop offset="40%" stop-color="#18202f"/>
+        <stop offset="100%" stop-color="#0a0f18"/>
+      </linearGradient>
+      <linearGradient id="giacca" x1="0.1" y1="0" x2="0.9" y2="1">
+        <stop offset="0%" stop-color="#4f95dd"/>
+        <stop offset="45%" stop-color="#3170b5"/>
+        <stop offset="100%" stop-color="#1d4a80"/>
+      </linearGradient>
+      <linearGradient id="giaccaScura" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#2a63a3"/>
+        <stop offset="100%" stop-color="#16375f"/>
+      </linearGradient>
+      <linearGradient id="camicia" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#eef4f8"/>
+        <stop offset="100%" stop-color="#c3d0da"/>
+      </linearGradient>
+      <linearGradient id="scarpa" x1="0.1" y1="0" x2="0.4" y2="1">
+        <stop offset="0%" stop-color="#8d6742"/>
+        <stop offset="55%" stop-color="#6a4728"/>
+        <stop offset="100%" stop-color="#3e2816"/>
+      </linearGradient>
+      <linearGradient id="lente" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity=".32"/>
+        <stop offset="45%" stop-color="#dff6ff" stop-opacity=".08"/>
+        <stop offset="100%" stop-color="#ffffff" stop-opacity=".16"/>
+      </linearGradient>
+      <filter id="morbido" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="8"/>
+      </filter>
+      <filter id="sfumato" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="4"/>
+      </filter>
+      <clipPath id="ritaglioTesta">
+        <ellipse cx="210" cy="155" rx="94" ry="98"/>
+      </clipPath>
+    </defs>
+
+    <g id="anelli">
+      <circle class="anello a1" cx="210" cy="165" r="118"/>
+      <circle class="anello a2" cx="210" cy="165" r="132"/>
+      <circle class="anello a3" cx="210" cy="165" r="146"/>
+    </g>
+
+    <!-- ---------------- corpo ---------------- -->
+    <g id="corpo">
+      <ellipse cx="210" cy="540" rx="112" ry="17" fill="#000" opacity=".5" filter="url(#morbido)"/>
+
+      <!-- braccio sinistro -->
+      <path d="M156 288 C132 306 118 348 116 392" fill="none" stroke="url(#giacca)" stroke-width="34" stroke-linecap="round"/>
+      <ellipse cx="115" cy="404" rx="17" ry="16" fill="url(#pelleScura)"/>
+
+      <!-- braccio destro -->
+      <path d="M264 288 C288 306 302 348 304 392" fill="none" stroke="url(#giacca)" stroke-width="34" stroke-linecap="round"/>
+      <ellipse cx="305" cy="404" rx="17" ry="16" fill="url(#pelleScura)"/>
+
+      <!-- gambe -->
+      <path d="M172 384 C164 434 162 478 166 506 L206 506 C208 470 208 430 208 388 Z" fill="url(#giacca)"/>
+      <path d="M248 384 C256 434 258 478 254 506 L214 506 C212 470 212 430 212 388 Z" fill="url(#giacca)"/>
+      <path d="M166 494 L206 494 L206 506 L166 506 Z" fill="url(#giaccaScura)"/>
+      <path d="M254 494 L214 494 L214 506 L254 506 Z" fill="url(#giaccaScura)"/>
+      <path d="M180 400 C176 436 175 470 177 492" fill="none" stroke="#a8d3ff" stroke-width="4" stroke-linecap="round" opacity=".12"/>
+
+      <!-- scarpe -->
+      <path d="M138 518 C136 507 146 499 162 500 L200 502 C208 503 210 511 208 518 C206 527 194 531 176 531 C158 531 141 528 138 518 Z" fill="url(#scarpa)"/>
+      <path d="M282 518 C284 507 274 499 258 500 L220 502 C212 503 210 511 212 518 C214 527 226 531 244 531 C262 531 279 528 282 518 Z" fill="url(#scarpa)"/>
+      <path d="M140 521 C160 527 186 528 206 522" fill="none" stroke="#2b1a0d" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+      <path d="M280 521 C260 527 234 528 214 522" fill="none" stroke="#2b1a0d" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+      <path d="M146 510 C156 505 172 504 192 505" fill="none" stroke="#b58a5f" stroke-width="3" stroke-linecap="round" opacity=".3"/>
+      <path d="M274 510 C264 505 248 504 228 505" fill="none" stroke="#b58a5f" stroke-width="3" stroke-linecap="round" opacity=".3"/>
+
+      <!-- torso -->
+      <path d="M210 256 C162 256 138 276 134 310 C130 346 134 376 142 398 C152 420 178 426 210 426 C242 426 268 420 278 398 C286 376 290 346 286 310 C282 276 258 256 210 256 Z" fill="url(#giacca)"/>
+
+      <!-- camicia e bavero -->
+      <path d="M184 260 C190 272 199 281 210 281 C221 281 230 272 236 260 C226 255 218 254 210 254 C202 254 194 255 184 260 Z" fill="url(#camicia)"/>
+      <path d="M184 260 C194 272 202 282 210 289 L199 298 C189 289 178 276 172 266 Z" fill="#3f7fc4"/>
+      <path d="M236 260 C226 272 218 282 210 289 L221 298 C231 289 242 276 248 266 Z" fill="#3f7fc4"/>
+
+      <!-- cerniera -->
+      <path d="M210 292 L210 418" fill="none" stroke="#17395f" stroke-width="3" opacity=".5"/>
+      <rect x="204" y="288" width="12" height="13" rx="4" fill="#c3d0da"/>
+
+      <!-- tasche -->
+      <path d="M164 372 C174 388 184 394 195 394" fill="none" stroke="#17395f" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+      <path d="M256 372 C246 388 236 394 225 394" fill="none" stroke="#17395f" stroke-width="3" stroke-linecap="round" opacity=".45"/>
+
+      <!-- luce sul petto -->
+      <path d="M160 300 C172 320 174 354 170 386 C163 372 156 342 154 316 Z" fill="#9fcdff" opacity=".12"/>
+    </g>
+
+    <!-- ---------------- testa ---------------- -->
+    <g id="testa">
+      <path d="M188 230 L232 230 C234 250 234 262 228 270 L192 270 C186 262 186 250 188 230 Z" fill="url(#pelleScura)"/>
+
+      <ellipse cx="116" cy="180" rx="16" ry="24" fill="#eeb590"/>
+      <ellipse cx="304" cy="180" rx="16" ry="24" fill="#eeb590"/>
+      <path d="M116 171 C110 177 110 187 116 193" fill="none" stroke="#c68f6c" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+      <path d="M304 171 C310 177 310 187 304 193" fill="none" stroke="#c68f6c" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+
+      <ellipse id="cranio" cx="210" cy="155" rx="94" ry="98" fill="url(#pelle)"/>
+      <ellipse cx="158" cy="200" rx="29" ry="19" fill="url(#guancia)"/>
+      <ellipse cx="262" cy="200" rx="29" ry="19" fill="url(#guancia)"/>
+
+      <!-- capelli -->
+      <path d="M112 152
+               C102 118 110 82 140 60
+               C168 38 210 32 246 44
+               C280 54 302 78 308 108
+               C311 126 307 142 300 154
+               C296 132 288 118 277 112
+               C262 104 244 104 230 112
+               C214 101 195 101 181 110
+               C165 101 147 105 137 118
+               C126 132 118 140 112 152 Z" fill="url(#capelli)"/>
+      <path d="M136 84 C160 52 204 40 240 52 C214 54 186 66 164 82 C152 90 142 96 136 104 Z" fill="#6b7ea6" opacity=".26"/>
+      <path d="M272 62 C298 82 310 110 310 136 C304 112 290 88 270 72 Z" fill="#8fa2c8" opacity=".16"/>
+      <path d="M186 108 C210 96 240 96 272 110 C244 106 214 106 190 114 Z" fill="#0a0f18" opacity=".5"/>
+
+      <!-- sopracciglia -->
+      <g id="sopracciglia">
+        <path id="ciglio-sx" d="M146 124 Q168 113 191 120" />
+        <path id="ciglio-dx" d="M229 120 Q252 113 274 124" />
+      </g>
+
+      <!-- occhi -->
+      <g id="occhi">
+        <g id="occhio-sx" class="occhio">
+          <ellipse cx="176" cy="160" rx="24" ry="20" fill="#fdfefe"/>
+          <g id="pupilla-sx">
+            <circle cx="178" cy="161" r="12" fill="url(#iride)"/>
+            <circle cx="178" cy="161" r="5.8" fill="#0b1420"/>
+            <circle cx="173" cy="155" r="3.4" fill="#ffffff" opacity=".95"/>
+          </g>
+        </g>
+        <g id="occhio-dx" class="occhio">
+          <ellipse cx="244" cy="160" rx="24" ry="20" fill="#fdfefe"/>
+          <g id="pupilla-dx">
+            <circle cx="242" cy="161" r="12" fill="url(#iride)"/>
+            <circle cx="242" cy="161" r="5.8" fill="#0b1420"/>
+            <circle cx="237" cy="155" r="3.4" fill="#ffffff" opacity=".95"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- naso -->
+      <path id="naso" d="M210 172 C206 181 203 187 206 191 C210 195 217 194 219 189 C221 184 214 179 210 172 Z" fill="#e8a887"/>
+      <ellipse cx="211" cy="188" rx="6" ry="4.5" fill="#ffd3b8" opacity=".45"/>
+
+      <!-- bocca -->
+      <path id="bocca" d="M180 208 Q210 214 240 208 Q210 220 180 208 Z"/>
+      <path id="sorriso" d="M180 208 Q210 230 240 208" />
+
+      <!-- occhiali -->
+      <g id="occhiali">
+        <circle cx="176" cy="160" r="34" fill="url(#lente)" stroke="#191d26" stroke-width="7"/>
+        <circle cx="244" cy="160" r="34" fill="url(#lente)" stroke="#191d26" stroke-width="7"/>
+        <path d="M142 156 C130 157 124 164 122 172" fill="none" stroke="#191d26" stroke-width="6" stroke-linecap="round"/>
+        <path d="M278 156 C290 157 296 164 298 172" fill="none" stroke="#191d26" stroke-width="6" stroke-linecap="round"/>
+        <path d="M158 134 C170 128 186 128 196 134" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity=".4"/>
+        <path d="M226 134 C238 128 254 128 264 134" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity=".4"/>
+      </g>
+
+      <!-- luce del viso -->
+      <ellipse cx="176" cy="106" rx="40" ry="18" fill="#ffffff" opacity=".08" filter="url(#sfumato)"/>
+    </g>
+  </svg>
+
+  <div id="sottotitoli" aria-live="polite">
+    <p id="sotto-tu" class="vuoto"><b>Tu</b><span></span></p>
+    <p id="sotto-ciro" class="vuoto"><b>Ciro</b><span></span></p>
+  </div>
+
+  <form id="credenziale" hidden autocomplete="off">
+    <p id="credenziale-titolo"></p>
+    <label>Nome <span class="prefisso" id="credenziale-prefisso"></span>
+      <input id="credenziale-nome" required pattern="[a-z0-9][a-z0-9\-]{0,39}" spellcheck="false"></label>
+    <label>Valore <input id="credenziale-valore" type="password" required autocomplete="new-password"></label>
+    <div class="pulsanti">
+      <button type="submit">Salva nel Portachiavi</button>
+      <button type="button" id="credenziale-chiudi">Chiudi</button>
+    </div>
+    <p id="credenziale-esito" aria-live="polite"></p>
+  </form>
+
+  <div id="stato">Dormo…</div>
+
+  <div id="sogni" aria-hidden="true">
+    <span class="sogno" style="--x:21%;--y:26%;--d:0s">☾</span>
+    <span class="sogno" style="--x:76%;--y:24%;--d:1.8s">☕</span>
+    <span class="sogno" style="--x:28%;--y:62%;--d:3.4s">♪</span>
+    <span class="sogno" style="--x:72%;--y:58%;--d:5s">✦</span>
+  </div>
+
+  <aside id="pannello">
+    <h2>Quanto ti resta</h2>
+    <div id="pannello-consumi"><p class="vuoto">—</p></div>
+    <h2 class="secondo">Ti aspettano <span id="conta-attese"></span></h2>
+    <ul id="pannello-attese"><li class="vuoto">nessuno</li></ul>
+  </aside>
+
+  <aside id="pannello-destra">
+    <h2>Sessioni <span id="conta-sessioni"></span></h2>
+    <ul id="pannello-sessioni"><li class="vuoto">nessuna sessione aperta</li></ul>
+  </aside>
+
+  <button id="interruttore" title="Accendi / spegni Ciro (S)" aria-pressed="false">
+    <span class="pallino"></span><span id="interruttore-testo">Spento</span>
+  </button>
+</div>
+
+<div id="avvio" class="visibile">
+  <div class="scheda">
+    <h1>Ciao, sono Ciro</h1>
+    <p>Ti ascolto, poi ti rispondo a voce.<br>Serve il permesso del microfono.</p>
+    <button id="bottone-avvio">Inizia</button>
+    <p class="nota">Puoi anche scrivermi: tocca la A in basso a destra.</p>
+  </div>
+</div>
+
+<button id="apri-chat" title="Chat scritta">A</button>
+
+<section id="chat">
+  <header>
+    <span>Chat</span>
+    <button id="chiudi-chat" title="Chiudi">×</button>
+  </header>
+  <div id="chat-lista"></div>
+  <form id="chat-form" autocomplete="off">
+    <input id="chat-testo" placeholder="Scrivi e premi Invio" />
+    <button type="submit">Invia</button>
+  </form>
+</section>
+
+<script src="faccia.js"></script>
+</body>
+</html>
