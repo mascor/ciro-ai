@@ -4,13 +4,25 @@
 // conversation list is on the page. It only reads.
 "use strict";
 
-// the signed-in address: the account button carries it in its label
-function accountDellaPagina() {
+// the signed-in address: the account button carries it in its label. The page does
+// not always show it (19/11/2026: the list arrived as "profilo-0" and the old list of
+// the real address stayed in Ciro), so the last address seen for this /u/N is kept
+// in the extension storage and used when the page does not show it.
+async function accountDellaPagina() {
+  const utente = location.pathname.match(/\/u\/(\d+)/);
+  const chiave = "chat-account-u" + (utente ? utente[1] : "0");
   for (const el of document.querySelectorAll('[aria-label*="@"]')) {
     const trovato = (el.getAttribute("aria-label") || "").match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
-    if (trovato) return trovato[0].toLowerCase();
+    if (trovato) {
+      const indirizzo = trovato[0].toLowerCase();
+      try { await chrome.storage.local.set({ [chiave]: indirizzo }); } catch {}
+      return indirizzo;
+    }
   }
-  const utente = location.pathname.match(/\/u\/(\d+)/);
+  try {
+    const salvato = (await chrome.storage.local.get(chiave))[chiave];
+    if (salvato) return salvato;
+  } catch {}
   return "profilo-" + (utente ? utente[1] : "0");
 }
 
@@ -47,16 +59,16 @@ function diagnosi() {
   };
 }
 
-function manda() {
+async function manda() {
   const conversazioni = nonLetti();
   if (conversazioni === null) {
     if (Date.now() - ultimaDiagnosi < 60000) return;
     ultimaDiagnosi = Date.now();
     chrome.runtime.sendMessage({ tipo: "chat-non-letti",
-      dato: { account: accountDellaPagina(), conversazioni: null, diagnosi: diagnosi() } }).catch(() => {});
+      dato: { account: await accountDellaPagina(), conversazioni: null, diagnosi: diagnosi() } }).catch(() => {});
     return;
   }
-  chrome.runtime.sendMessage({ tipo: "chat-non-letti", dato: { account: accountDellaPagina(), conversazioni } })
+  chrome.runtime.sendMessage({ tipo: "chat-non-letti", dato: { account: await accountDellaPagina(), conversazioni } })
     .catch(() => {});
 }
 

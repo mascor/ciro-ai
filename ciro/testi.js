@@ -122,6 +122,7 @@ const EN_UI = {
   "Clicca per vederli": "Click to show them",
   "urgente": "urgent",
   "Lettura non riuscita": "Read failed",
+  "Scheda di Chat chiusa": "Chat tab closed",
 };
 
 // T("da %d min", 5): translation, then %s/%d replaced in order

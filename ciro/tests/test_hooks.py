@@ -198,6 +198,25 @@ class TestOpenCode(BaseHook):
         self.assertEqual(domande.elenca()[0]["stato"], "annullata")
         self.assertFalse(server.opencode_risposto({"requestID": "per_1"}))   # already closed
 
+    def test_stessa_richiesta_da_piu_processi_una_domanda(self):
+        esiti = []
+        fili = [threading.Thread(target=lambda: esiti.append(server.gestisci_opencode(self.RICHIESTA, attesa=5)))
+                for _ in range(3)]
+        fili[0].start()
+        for _ in range(100):
+            if domande.elenca():
+                break
+            time.sleep(0.05)
+        for filo in fili[1:]:
+            filo.start()
+        time.sleep(0.3)
+        self.giro()
+        self.assertEqual(len(domande.elenca()), 1)
+        self.assertTrue(self.c.chiedi("sì")["mandato"])
+        for filo in fili:
+            filo.join(5)
+        self.assertEqual(esiti, [{"reply": "once"}] * 3)
+
     def test_riassunti_opencode(self):
         self.assertEqual(server.riassunto_opencode("edit", ["/a/b/app.py"]), "vuole modificare il file app.py")
         self.assertEqual(server.riassunto_opencode("external_directory", ["/tmp/*"]),

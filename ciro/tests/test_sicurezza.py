@@ -207,6 +207,19 @@ class TestChatSicura(BaseRisposte):
         self.arriva([], account="home@example.com")                 # read again: zero messages
         self.assertEqual(self.lettura_non_riuscita(), [])
 
+    def test_profilo_che_tace_non_mostra_messaggi_vecchi(self):
+        self.arriva([DIRETTA])
+        self.assertEqual(len([v for v in server.attese() if v.get("tipo") == "chat"]), 1)
+        dati = json.loads((self.tmp / "chat.json").read_text(encoding="utf-8"))
+        dati["account"]["work@example.com"] = time.time() - modulo_chat.ASSENTE - 60   # tab closed
+        (self.tmp / "chat.json").write_text(json.dumps(dati), encoding="utf-8")
+        voci = [v for v in server.attese() if v.get("tipo") == "chat"]
+        self.assertEqual([v["chat_id"] for v in voci], ["lettura|work@example.com"])
+        self.assertTrue(voci[0]["silenzioso"])
+        self.assertIn("riapri la scheda", voci[0]["testo"])
+        self.arriva([DIRETTA])                                    # the tab is back: the message too
+        self.assertEqual([v.get("mittente") for v in server.attese() if v.get("tipo") == "chat"], ["Luca Bianchi"])
+
     def test_profilo_che_tace_non_resta_in_errore(self):
         self.chat.lettura_fallita("home@example.com", adesso=time.time() - modulo_chat.FALLITA_DOPO - 5)
         self.assertIn("home@example.com", self.chat.letture_fallite())

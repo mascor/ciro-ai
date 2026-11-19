@@ -167,7 +167,11 @@ class Chat:
 
     def aperte(self, adesso=None):
         adesso = time.time() if adesso is None else adesso
-        voci = [v for v in self._leggi()["conversazioni"].values() if adesso - v.get("visto", adesso) <= DURATA]
+        dati = self._leggi()
+        # un profilo che tace (scheda di Chat chiusa o addormentata): il suo elenco e' vecchio, non lo mostro
+        vivi = {a for a, quando in dati["account"].items() if adesso - quando <= ASSENTE}
+        voci = [v for v in dati["conversazioni"].values()
+                if adesso - v.get("visto", adesso) <= DURATA and v.get("account") in vivi]
         return sorted(voci, key=lambda v: v.get("visto", 0))
 
     def chiudi(self, chiave):
@@ -180,6 +184,16 @@ class Chat:
             dati["chiuse"][chiave] = voce.get("testo")
             self._scrivi(dati)
             return True
+
+    def silenziosi(self, adesso=None):
+        """{account: secondi di silenzio} per i profili che mandavano l'elenco e tacciono da piu' di
+        ASSENTE (fino a DURATA): i loro messaggi non si aggiornano."""
+        adesso = time.time() if adesso is None else adesso
+        dati = self._leggi()
+        letti = {v.get("account") for v in dati["conversazioni"].values()} | {
+            a for a, l in dati["letture"].items() if l.get("ok")}
+        return {a: int(adesso - quando) for a, quando in dati["account"].items()
+                if a in letti and ASSENTE < adesso - quando <= DURATA}
 
     def account_assenti(self, adesso=None):
         adesso = time.time() if adesso is None else adesso

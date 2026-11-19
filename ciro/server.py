@@ -667,6 +667,12 @@ def attese(sessioni=None):
                        "risposta": voce.get("risposta"), "motivo": voce.get("motivo"),
                        "testo": (voce.get("testo") or t("Messaggi non letti"))[:280], "a_voce": False,
                        "secondi": int(adesso_s - voce.get("visto", adesso_s))})
+    for account, secondi in _chat.silenziosi(adesso_s).items():
+        elenco.append({"progetto": "chat", "tipo": "chat", "chat_id": "lettura|" + account,
+                       "account": account, "mittente": t("Scheda di Chat chiusa"),
+                       "testo": t("Da %d min non arriva niente da questo profilo: riapri la scheda di Google Chat.")
+                       % (secondi // 60),
+                       "urgente": False, "a_voce": False, "secondi": secondi, "silenzioso": True})
     for account, secondi in _chat.letture_fallite(adesso_s).items():
         # zero messaggi e lettura fallita sono diversi: questa si vede nel pannello
         elenco.append({"progetto": "chat", "tipo": "chat", "chat_id": "lettura|" + account,
@@ -1256,12 +1262,17 @@ def _chiedi_e_aspetta(pronta, sessione, evento, attesa, adesso, richiesta=None):
     progetto, oggetto, testo, opzioni, operazione, risposta = pronta
     if in_pausa(progetto):
         return None
-    try:
-        identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione,
-                                                     sessione=sessione)
-    except Exception as errore:  # noqa: BLE001
-        registra("errore-hook", errore=repr(errore)[:300])
-        return None
+    if richiesta and richiesta in _richieste_opencode:
+        # OpenCode carica il plugin in piu' processi: la stessa richiesta arriva piu' volte,
+        # la domanda resta una sola (e chi arriva dopo non la chiude)
+        identificativo, richiesta = _richieste_opencode[richiesta], None
+    else:
+        try:
+            identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione,
+                                                         sessione=sessione)
+        except Exception as errore:  # noqa: BLE001
+            registra("errore-hook", errore=repr(errore)[:300])
+            return None
     if richiesta:
         _richieste_opencode[richiesta] = identificativo
     registra("hook", evento=evento, domanda_id=identificativo)
@@ -1271,10 +1282,11 @@ def _chiedi_e_aspetta(pronta, sessione, evento, attesa, adesso, richiesta=None):
     try:
         while True:
             scheda = domande.leggi(identificativo)
-            if scheda.get("stato") == "risposta-consegnata":
+            # (recepita/risolta: un'altra copia della stessa richiesta l'ha gia' restituita)
+            if scheda.get("stato") in ("risposta-consegnata", "recepita", "risolta"):
                 break
-            if scheda.get("stato") == "annullata":
-                return None   # risposto nel terminale
+            if scheda.get("stato") != "in-attesa" and scheda.get("stato") not in ("ricevuta", "in-valutazione"):
+                return None   # annullata: risposto nel terminale
             if adesso() >= fine:
                 try:
                     domande.passa(identificativo, "annullata", "ciro", "passata al terminale",

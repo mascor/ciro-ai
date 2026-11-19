@@ -156,6 +156,9 @@ EN = {
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
     "Messaggi non letti": "Unread messages",
+    "Scheda di Chat chiusa": "Chat tab closed",
+    "Da %d min non arriva niente da questo profilo: riapri la scheda di Google Chat.":
+        "Nothing from this profile for %d min: reopen the Google Chat tab.",
     # session hooks («ciro connect»)
     "vuole eseguire: %s": "wants to run: %s",
     "vuole modificare il file %s": "wants to edit the file %s",

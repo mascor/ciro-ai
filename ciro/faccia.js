@@ -924,7 +924,7 @@ function disegnaCaselle(chat) {
     const info = document.createElement("span");
     if (fallita) {
       info.className = "avviso";
-      info.textContent = T("Lettura non riuscita");
+      info.textContent = fallita.silenzioso ? T("Scheda di Chat chiusa") : T("Lettura non riuscita");
     } else {
       info.className = "conta";
       const parti = [];
