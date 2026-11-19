@@ -160,11 +160,99 @@ MODELLO_RAPIDO = Path(os.environ.get("CIRO_MODELLO_RAPIDO") or
 AUDIO_BREVE = float(os.environ.get("CIRO_AUDIO_BREVE") or 3.5)   # secondi (un «sì» registrato dura ~3,1 s)
 
 
+CARTELLA_MODELLI = Path.home() / ".local/share/whisper-cpp"
+MODELLI_CANDIDATI = {"base": "ggml-base-q5_1.bin", "small": "ggml-small-q5_1.bin",
+                     "large-v3-turbo": "ggml-large-v3-turbo-q5_0.bin"}
+
+
+def modello_rapido():
+    """Il modello per l'audio breve: quello scelto dal banco di prova dopo la
+    calibrazione (profilo voce), altrimenti MODELLO_RAPIDO."""
+    scelto = modulo_cervello.profilo_voce().get("modello_breve")
+    if scelto and (CARTELLA_MODELLI / MODELLI_CANDIDATI.get(scelto, "")).is_file():
+        return CARTELLA_MODELLI / MODELLI_CANDIDATI[scelto]
+    return MODELLO_RAPIDO
+
+
+def scegli_modello(risultati):
+    """{nome: (capite, secondi)} -> il piu' veloce che capisce quanto il grande, o None."""
+    riferimento = risultati.get("large-v3-turbo", (0, 0))[0]
+    buoni = [(secondi, nome) for nome, (capite, secondi) in risultati.items()
+             if nome != "large-v3-turbo" and capite >= riferimento]
+    return min(buoni)[1] if buoni else None
+
+
+def scegli_modello_in_sottofondo():
+    """Dopo una calibrazione: prova i modelli sulle frasi brevi registrate (banco di
+    prova) e salva nel profilo il piu' veloce che non perde precisione."""
+    def lavora():
+        try:
+            cartella = CONFIG_FACCIA / "collaudi" / "audio"
+            etichette = json.loads((cartella / "etichette.json").read_text(encoding="utf-8"))
+            alias = dict(modulo_cervello.LETTERE_SENTITE)
+            alias.update(modulo_cervello.leggi_impostazioni().get("alias_lettere") or {})
+            brevi = {f: e for f, e in etichette.items() if (cartella / f).is_file()
+                     and ((cartella / f).stat().st_size - 44) / 32000.0 <= AUDIO_BREVE * 1.5}
+            risultati = {}
+            for nome, file_modello in MODELLI_CANDIDATI.items():
+                percorso = CARTELLA_MODELLI / file_modello
+                if not percorso.is_file():
+                    continue
+                capite, tempi = 0, []
+                for file, attesa in brevi.items():
+                    inizio = time.time()
+                    esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", LINGUA, "-nt", "-np",
+                                            "--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200",
+                                            "-f", str(cartella / file)], capture_output=True, text=True,
+                                           timeout=120)
+                    tempi.append(time.time() - inizio)
+                    sentita = pulisci_trascrizione(esito.stdout)
+                    a, s = modulo_collaudo.normalizza(attesa), modulo_collaudo.normalizza(sentita)
+                    capite += a == s or (len(a) == 1 and alias.get(s) == a)
+                risultati[nome] = (capite, sorted(tempi)[len(tempi) // 2] if tempi else 0)
+            scelto = scegli_modello(risultati)
+            if scelto:
+                modulo_cervello.aggiorna_profilo(modello_breve=scelto)
+            registra("modello-scelto", scelto=scelto, risultati=risultati, frasi=len(brevi))
+        except Exception as errore:  # noqa: BLE001
+            registra("errore-modello", errore=repr(errore)[:300])
+    threading.Thread(target=lavora, daemon=True).start()
+
+
+# ultime frasi trascritte con il loro audio: se l'utente corregge una risposta
+# capita male, quell'audio va nel banco di prova con l'etichetta giusta
+import collections  # noqa: E402
+_ultimi_audio = collections.deque(maxlen=6)
+
+
+def _normale(testo):
+    return re.sub(r"[^\w'àèéìòù]+", " ", (testo or "").lower()).strip()
+
+
+def impara_audio(da_imparare, cartella=None):
+    cartella = Path(cartella or CONFIG_FACCIA / "collaudi" / "audio")
+    for testo, audio in reversed(_ultimi_audio):
+        if _normale(testo) == da_imparare.get("sentito"):
+            cartella.mkdir(parents=True, exist_ok=True)
+            nome = "correzione-%s.wav" % time.strftime("%Y%m%d-%H%M%S")
+            (cartella / nome).write_bytes(audio)
+            file_etichette = cartella / "etichette.json"
+            try:
+                etichette = json.loads(file_etichette.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                etichette = {}
+            etichette[nome] = da_imparare.get("giusta")
+            file_etichette.write_text(json.dumps(etichette, ensure_ascii=False, indent=1), encoding="utf-8")
+            registra("impara-audio", sentito=da_imparare.get("sentito"), giusta=da_imparare.get("giusta"))
+            return nome
+    return None
+
+
 def passate_whisper(durata, rapido_esiste=None):
     """Le passate da provare in ordine: (modello, con VAD). Per l'audio breve,
     se il VAD scarta tutto (una «A» cortissima), una seconda passata senza VAD."""
     if rapido_esiste is None:
-        rapido_esiste = MODELLO_RAPIDO.is_file()
+        rapido_esiste = modello_rapido().is_file()
     if durata <= AUDIO_BREVE and rapido_esiste:
         return [("rapido", True), ("rapido", False)]
     return [("preciso", True)]
@@ -194,7 +282,7 @@ def trascrivi(byte_audio):
             # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
             vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
                    if con_vad and MODELLO_VAD.is_file() else [])
-            percorso = MODELLO_RAPIDO if modello == "rapido" else MODELLO_WHISPER
+            percorso = modello_rapido() if modello == "rapido" else MODELLO_WHISPER
             esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", LINGUA,
                                     "-nt", "-np", *vad, "-f", str(pronto)],
                                    capture_output=True, text=True, timeout=180)
@@ -846,7 +934,8 @@ _collaudo = modulo_collaudo.Collaudo(
     dire=lambda frase, **extra: _in_coda({"testo": frase, "da": "collaudo", **extra}),
     stato_pausa=stato_pausa, imposta_pausa=imposta_pausa,
     cartella=CONFIG_FACCIA / "collaudi",
-    righe_registro=lambda dal: _righe_registro(dal))
+    righe_registro=lambda dal: _righe_registro(dal),
+    dopo_calibrazione=lambda: scegli_modello_in_sottofondo())
 _cervello.collaudo = _collaudo
 
 
@@ -1038,7 +1127,9 @@ def quadro():
     sessioni = modulo_cervello.leggi_sessioni() or []
     return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni),
             "pausa": stato_pausa(), "collaudo": _collaudo.fase, "guida": _collaudo.stato_guida(),
-            "microfono": {"soglia": modulo_cervello.leggi_impostazioni().get("soglia_microfono")}}
+            "microfono": {"soglia": modulo_cervello.leggi_impostazioni().get("soglia_microfono"),
+                          "fine_frase_ms": modulo_cervello.profilo_voce().get("fine_frase_ms"),
+                          "eco": modulo_cervello.profilo_voce().get("eco")}}
 
 
 
@@ -1161,6 +1252,8 @@ class Gestore(BaseHTTPRequestHandler):
                         pass
                 inizio = time.time()
                 testo = trascrivi(corpo)
+                if testo:
+                    _ultimi_audio.append((testo, corpo))
                 registra("ascolto", testo=testo, audio_kb=len(corpo) // 1024,
                          secondi_trascrizione=round(time.time() - inizio, 1))
                 self._invia(200, json.dumps({"testo": testo}))
@@ -1198,7 +1291,7 @@ class Gestore(BaseHTTPRequestHandler):
                         esito = {"risposta": ""}
                     elif dato.get("tipo") == "silenzio":
                         esito = {"risposta": _collaudo.silenzio(dato.get("medio") or 0, dato.get("p95") or 0,
-                                                                dato.get("massimo") or 0)}
+                                                                dato.get("massimo") or 0, dato.get("eco"))}
                         registra("collaudo-silenzio", **{k: dato.get(k) for k in ("medio", "p95", "massimo")})
                     elif dato.get("azione") == "ferma":
                         esito = {"risposta": _collaudo.ferma()}
@@ -1228,7 +1321,11 @@ class Gestore(BaseHTTPRequestHandler):
                     return
                 with _cervello_lock:
                     _cervello.ultimo_livello = dato.get("livello")
+                    _cervello.ultime_pause = dato.get("pause")
                     esito = _cervello.chiedi(testo)
+                    if _cervello.da_imparare:   # una correzione: l'audio capito male va nel banco
+                        impara_audio(_cervello.da_imparare)
+                        _cervello.da_imparare = None
                 self._invia(200, json.dumps(esito, ensure_ascii=False))
             else:
                 self._errore(404, "non trovato")

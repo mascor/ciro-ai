@@ -19,7 +19,8 @@ from pathlib import Path
 
 import cervello as modulo_cervello
 
-FRASI = ["uno", "due", "sì", "no", "uno per prova due"]
+FRASI = ["uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"]
+FRASE_LIBERA = FRASI[-1]   # misura le pause e il riconoscimento delle frasi libere
 SILENZIO_SECONDI = 5
 PROGETTI_PROVA = ["prova-ciro", "prova-due"]
 ATTESA_FRASE = 20.0
@@ -55,13 +56,14 @@ def normalizza(testo):
 
 class Collaudo:
     def __init__(self, dire, stato_pausa, imposta_pausa, cartella, orologio=time.time,
-                 righe_registro=None):
+                 righe_registro=None, dopo_calibrazione=None):
         self.dire = dire                   # dire(frase, **extra): Ciro says it (server queue)
         self.stato_pausa = stato_pausa
         self.imposta_pausa = imposta_pausa
         self.cartella = Path(cartella)
         self.orologio = orologio
         self.righe_registro = righe_registro or (lambda dal: [])
+        self.dopo_calibrazione = dopo_calibrazione   # es. scelta automatica del modello
         self.fase = "spento"
         self._azzera()
 
@@ -71,6 +73,7 @@ class Collaudo:
         self.pausa_prima = None
         self.rumore = {}
         self.livelli = []
+        self.pause = []
         self.frasi_sentite = []
         self.indice = 0
         self.tentativi = []
@@ -151,10 +154,12 @@ class Collaudo:
                 "riepilogo": self.riepilogo}
 
     # ------------------------------------------------------------ calibration
-    def silenzio(self, medio, p95, massimo):
+    def silenzio(self, medio, p95, massimo, eco=None):
         if self.fase != "silenzio":
             return ""
         self.rumore = {"medio": float(medio), "p95": float(p95), "massimo": float(massimo)}
+        if eco:
+            self.rumore["eco"] = float(eco)
         provvisoria = round(max(0.008, 3 * float(medio)), 4)
         modulo_cervello.imposta("soglia_microfono", provvisoria)
         self.rumore["soglia"] = provvisoria
@@ -171,6 +176,9 @@ class Collaudo:
         a, s = normalizza(attesa), normalizza(sentita)
         if a == s:
             return True
+        if attesa == FRASE_LIBERA:   # frase lunga: basta la maggior parte delle parole
+            parole = a.split()
+            return sum(1 for p in parole if p in s.split()) >= 0.6 * len(parole)
         if len(a) == 1 and s:
             appresi = dict(modulo_cervello.leggi_impostazioni().get("alias_lettere") or {})
             alias = dict(modulo_cervello.LETTERE_SENTITE)
@@ -182,6 +190,10 @@ class Collaudo:
         return False
 
     def _registra_frase(self, ok):
+        if ok:   # i tentativi sbagliati prima di quello giusto: errori tipici di questa voce
+            for sbagliato in self.tentativi[:-1]:
+                if len(normalizza(sbagliato)) <= 3:
+                    modulo_cervello.impara_confusione(sbagliato, FRASI[self.indice])
         self.frasi_sentite.append({"attesa": FRASI[self.indice], "ok": ok, "tentativi": list(self.tentativi),
                                    "secondi": round(self.orologio() - self.chiesta, 1)})
         self.indice += 1
@@ -205,13 +217,25 @@ class Collaudo:
         modulo_cervello.imposta("soglia_microfono", soglia)
         self.rumore["soglia"] = soglia
         self.rumore["voce"] = voce
+        profilo = {}
+        if len(self.pause) >= 3:   # fine frase su misura: le pause dentro le sue frasi
+            ordinate = sorted(self.pause)
+            p90 = ordinate[min(len(ordinate) - 1, int(len(ordinate) * 0.9))]
+            profilo["fine_frase_ms"] = max(600, min(1200, p90 + 250))
+        if self.rumore.get("eco"):
+            profilo["eco"] = self.rumore["eco"]
+        if profilo:
+            modulo_cervello.aggiorna_profilo(**profilo)
+        self.rumore.update(profilo)
         capite = sum(1 for r in self.frasi_sentite if r["ok"])
         frase = "Calibrazione finita: ti ho capito %d frasi su %d." % (capite, len(FRASI))
         if voce and voce < 5 * rumore:
             frase += " Parli piano rispetto al rumore: avvicinati al microfono."
         self._chiudi(frase)
+        if self.dopo_calibrazione:
+            self.dopo_calibrazione()
 
-    def gestisci(self, testo, livello=None):
+    def gestisci(self, testo, livello=None, pause=None):
         """The user's words: consumed during silenzio and frasi (dict), otherwise None."""
         if not self.attivo:
             return None
@@ -225,6 +249,7 @@ class Collaudo:
             return None
         if livello:
             self.livelli.append(float(livello))
+        self.pause.extend(int(p) for p in (pause or []) if 0 < int(p) < 3000)
         self.tentativi.append(testo)
         ok = self._uguale(FRASI[self.indice], testo)
         self.ultima = {"attesa": FRASI[self.indice], "sentito": testo, "ok": ok}
@@ -365,11 +390,15 @@ class Collaudo:
             righe += ["Rumore della stanza: medio %.4f, 95%% %.4f, massimo %.4f"
                       % (self.rumore.get("medio", 0), self.rumore.get("p95", 0), self.rumore.get("massimo", 0)),
                       "Voce (mediana delle frasi): %.4f" % self.rumore.get("voce", 0),
-                      "Soglia del microfono: %.4f" % self.rumore.get("soglia", 0), ""]
+                      "Soglia del microfono: %.4f" % self.rumore.get("soglia", 0),
+                      "Fine frase: %s ms (pause misurate: %s)" % (self.rumore.get("fine_frase_ms", "invariata"),
+                                                                 self.pause or "-"),
+                      "Eco della voce di Ciro: %s" % self.rumore.get("eco", "-"), ""]
             for r in self.frasi_sentite:
                 righe.append("  %-3s %-18s sentito: %s" % ("OK" if r["ok"] else "NO", r["attesa"],
                                                          " | ".join(r["tentativi"]) or "(niente)"))
-            righe += ["", "Alias imparati: %s" % (modulo_cervello.leggi_impostazioni().get("alias_lettere") or {})]
+            righe += ["", "Alias imparati: %s" % (modulo_cervello.leggi_impostazioni().get("alias_lettere") or {}),
+                      "Errori tipici della voce: %s" % (modulo_cervello.profilo_voce().get("confusioni") or {})]
         else:
             for c in self.compiti:
                 righe.append("  compito %d: %s, %s, %d turni, %.0f s" % (

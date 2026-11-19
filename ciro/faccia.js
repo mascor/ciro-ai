@@ -260,7 +260,7 @@ function riproduci(audio) {
     impostaFase("parlo");
     sospeso = true; // mentre parla il microfono ascolta solo per le interruzioni
     inizioVoceCiro = performance.now();
-    eco = 0;
+    eco = ecoCalibrata || 0;
     fotogrammiSopra = 0;
     sorgente = ctxUscita.createBufferSource();
     sorgente.buffer = audio;
@@ -377,6 +377,9 @@ let rumore = 0.004;
 let rumoreAppreso = 0;    // livello dei falsi allarmi: riscende piano (~3 minuti)
 let sogliaCalibrata = null; // dalla calibrazione guidata («Ciro, calibrati»)
 let calibrando = false;     // durante la calibrazione: niente ricariche e niente soglie apprese
+let fineFrase = 900;        // ms di silenzio per dire che hai finito (profilo voce)
+let ecoCalibrata = 0;       // eco della voce di Ciro nel microfono (profilo voce)
+let pauseDiscorso = [];     // pause dentro la frase in corso, in ms (per il profilo voce)
 let misurando = null;       // campioni del silenzio mentre la calibrazione lo misura
 let attesaInvio = false;
 let filaForte = 0;        // fotogrammi di fila sopra la soglia (128 ms l'uno)
@@ -449,6 +452,7 @@ function esaminaMicrofono(dati) {
     ultimoSuono = adesso;
     filaForte = 0;
     voceVera = false;
+    pauseDiscorso = [];
     segnalaAttivita();
   }
 
@@ -458,11 +462,13 @@ function esaminaMicrofono(dati) {
     // tastiera no: i clic non tengono aperto l'ascolto
     filaForte = rms > soglia ? filaForte + 1 : 0;
     if (filaForte >= 2) {
+      const pausa = adesso - ultimoSuono - 128; // un fotogramma e' ancora voce
+      if (voceVera && pausa > 120) pauseDiscorso.push(Math.round(pausa));
       ultimoSuono = adesso;
       voceVera = true;
     }
     const troppoLungo = adesso - inizioDiscorso > 30000;
-    if (adesso - ultimoSuono > 900 || troppoLungo) {
+    if (adesso - ultimoSuono > fineFrase || troppoLungo) {
       parlando = false;
       const pezzi = bufferIngresso;
       bufferIngresso = [];
@@ -472,7 +478,7 @@ function esaminaMicrofono(dati) {
         return;
       }
       attesaInvio = true;
-      inviaDiscorso(pezzi).finally(() => {
+      inviaDiscorso(pezzi, pauseDiscorso.slice()).finally(() => {
         attesaInvio = false;
       });
     }
@@ -539,7 +545,7 @@ function codificaWav(pezzi, frequenza) {
   return buffer;
 }
 
-async function inviaDiscorso(pezzi) {
+async function inviaDiscorso(pezzi, pause) {
   if (!pezzi.length || !ctxRec) return;
   const campioni = pezzi.reduce((totale, p) => totale + p.length, 0);
   if (campioni < ctxRec.sampleRate * 0.6) { // meno di 0,6 s: un rumore, non una frase
@@ -572,7 +578,7 @@ async function inviaDiscorso(pezzi) {
     aggiungiMessaggio("io", testo);
     impostaFase("ascolto");
     segnalaAttivita();
-    await chiediAlCervello(testo, livello);
+    await chiediAlCervello(testo, livello, pause);
   } catch (errore) {
     console.warn(errore);
     evento("errore-ascolto", errore && errore.message);
@@ -582,13 +588,13 @@ async function inviaDiscorso(pezzi) {
 }
 
 // Il cervello: OpenCode con il quadro delle sessioni e della posta.
-async function chiediAlCervello(testo, livello) {
+async function chiediAlCervello(testo, livello, pause) {
   impostaFase("penso");
   try {
     const risposta = await fetch("/api/cervello", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ testo, livello: livello || null }),
+      body: JSON.stringify({ testo, livello: livello || null, pause: pause || [] }),
     });
     if (!risposta.ok) throw new Error("cervello non disponibile");
     const dato = await risposta.json();
@@ -927,6 +933,10 @@ function disegnaQuadro(dati) {
   disegnaGuida(dati.guida);
   const calibrata = dati.microfono && Number(dati.microfono.soglia);
   if (calibrata > 0) sogliaCalibrata = calibrata;
+  const fine = dati.microfono && Number(dati.microfono.fine_frase_ms);
+  if (fine >= 500 && fine <= 1500) fineFrase = fine;
+  const ecoProfilo = dati.microfono && Number(dati.microfono.eco);
+  if (ecoProfilo > 0) ecoCalibrata = ecoProfilo;
   disegnaConsumi(dati.consumi || []);
   disegnaAttese(dati.attese || []);
   disegnaSessioni(dati.sessioni || []);
@@ -1217,7 +1227,7 @@ async function misuraSilenzio(secondi) {
   try {
     const risposta = await fetch("/api/collaudo", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tipo: "silenzio", medio, p95, massimo }),
+      body: JSON.stringify({ tipo: "silenzio", medio, p95, massimo, eco: eco || null }),
     });
     const dato = await risposta.json();
     sogliaCalibrata = null; // la nuova arriva con il quadro

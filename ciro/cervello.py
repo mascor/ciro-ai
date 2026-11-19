@@ -539,6 +539,7 @@ class Cervello:
         self.ultimo_detto = None
         self.collaudo = None          # calibrazione guidata (collaudo.Collaudo), se c'e'
         self.ultimo_livello = None    # livello del microfono dell'ultima frase (dalla pagina)
+        self.ultime_pause = None      # pause dentro l'ultima frase, in ms (dalla pagina)
         self._carica()
 
     def annota_avviso(self, progetto, frase, domanda=True):
@@ -1110,7 +1111,7 @@ class Cervello:
                 risposta = self.collaudo.avvia("collaudo")
                 self.storico += [("io", testo), ("faccia", risposta)]
                 return {"risposta": risposta, "azione": None, "mandato": False}
-            consumato = self.collaudo.gestisci(testo, self.ultimo_livello)
+            consumato = self.collaudo.gestisci(testo, self.ultimo_livello, self.ultime_pause)
             if consumato is not None:
                 self.storico += [("io", testo), ("faccia", consumato["risposta"])]
                 return consumato
