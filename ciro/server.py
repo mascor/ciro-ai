@@ -98,7 +98,7 @@ FILE_MUTO = CONFIG_FACCIA / "muto"   # contiene l'ora (epoch) fino a cui Ciro st
 
 
 AVVIO_SERVER = int(time.time())
-FILE_PAGINA = ("index.html", "faccia.js", "stile.css")
+FILE_PAGINA = ("index.html", "testi.js", "faccia.js", "stile.css")
 
 
 def versione():

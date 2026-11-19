@@ -53,7 +53,11 @@ then reduces the text size instead of scrolling.
 ### Listening and speaking
 - Always-on microphone with voice activity detection: no button to press.
 - You can **interrupt** Ciro while it speaks: it stops at once and listens.
-- Italian voice (Kokoro `im_nicola`), mouth animated on the real sound.
+- **Italian or English**: the **EN / IT** button at the top right, or say "speak English" /
+  "parla italiano". The voice (Kokoro `im_nicola` / `am_michael`), the speech recognition
+  language (whisper), the page, the calibration phrases and the voice profile all switch
+  together; each language keeps its own calibration.
+- Mouth animated on the real sound.
 - Written chat as an alternative (the **A** button at the bottom right).
 - `S` turns Ciro on and off, `M` toggles the microphone.
 
@@ -309,4 +313,4 @@ Issues and pull requests are welcome. The design of the coordination is in
 
 MIT — see [LICENSE](LICENSE).
 
-The code and the voice are in Italian; the documentation is in English.
+The code is written in Italian; Ciro speaks Italian or English; the documentation is in English.

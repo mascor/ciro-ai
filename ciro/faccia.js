@@ -68,7 +68,7 @@ function disegnaBocca(ap, larghezza) {
 function impostaFase(nuova) {
   if (!sveglia) {
     scena.classList.remove("ascolta", "parla");
-    stato.textContent = "Dormo…";
+    stato.textContent = T("Dormo…");
     return;
   }
   if (fase === nuova) return;
@@ -76,12 +76,12 @@ function impostaFase(nuova) {
   scena.classList.toggle("ascolta", nuova === "ascolto");
   scena.classList.toggle("parla", nuova === "parlo");
   sopracciglia.classList.toggle("su", nuova === "ascolto" || nuova === "penso");
-  stato.textContent = {
+  stato.textContent = T({
     pronto: "Pronto",
     ascolto: "Ti ascolto",
     penso: "Un attimo",
     parlo: "Parlo io",
-  }[nuova];
+  }[nuova]);
 }
 
 function anima(adesso) {
@@ -250,7 +250,7 @@ async function prossimo() {
   } catch (errore) {
     console.warn(errore);
     evento("errore-voce", errore && errore.message);
-    stato.textContent = "Voce non disponibile";
+    stato.textContent = T("Voce non disponibile");
   }
   prossimo();
 }
@@ -311,7 +311,7 @@ function controllaInattivita() {
     fischia(); // primo richiamo: fischio breve
   } else {
     const frase = FRASI_RICHIAMO[Math.floor(richiami / 2) % FRASI_RICHIAMO.length];
-    di(frase); // poi anche a voce, se continua a non essere usata
+    di(T(frase)); // poi anche a voce, se continua a non essere usata
   }
   richiami++;
 }
@@ -325,16 +325,16 @@ function accendi(saluta) {
   evento("acceso", saluta === false ? "senza saluto" : "");
   interruttore.classList.add("acceso");
   interruttore.setAttribute("aria-pressed", "true");
-  interruttoreTesto.textContent = "Acceso";
+  interruttoreTesto.textContent = T("Acceso");
   scena.classList.remove("dorme");
   segnalaAttivita();
   impostaFase("ascolto");
   ctxUscita.resume().catch(() => {});
   accendiMicrofono().catch((errore) => {
     evento("errore-microfono", errore && errore.message);
-    stato.textContent = "Microfono non disponibile";
+    stato.textContent = T("Microfono non disponibile");
   });
-  if (saluta !== false) di("Eccomi, sono sveglio.");
+  if (saluta !== false) di(T("Eccomi, sono sveglio."));
 }
 
 function spegni() {
@@ -343,7 +343,7 @@ function spegni() {
   evento("spento", "");
   interruttore.classList.remove("acceso");
   interruttore.setAttribute("aria-pressed", "false");
-  interruttoreTesto.textContent = "Spento";
+  interruttoreTesto.textContent = T("Spento");
   scena.classList.add("dorme");
   coda.length = 0; // niente frasi in sospeso mentre dorme
   if (sorgente) {
@@ -354,7 +354,7 @@ function spegni() {
   attesaInvio = false;
   parlando = false;
   fase = "pronto";
-  stato.textContent = "Dormo…";
+  stato.textContent = T("Dormo…");
 }
 
 interruttore.addEventListener("click", () => {
@@ -582,7 +582,7 @@ async function inviaDiscorso(pezzi, pause) {
   } catch (errore) {
     console.warn(errore);
     evento("errore-ascolto", errore && errore.message);
-    stato.textContent = "Non ho capito";
+    stato.textContent = T("Non ho capito");
     setTimeout(() => impostaFase(micAttivo ? "ascolto" : "pronto"), 1500);
   }
 }
@@ -619,9 +619,9 @@ async function chiediAlCervello(testo, livello, pause) {
 function rispostaProvvisoria(testo) {
   const pulito = testo.trim().replace(/\s+/g, " ");
   if (/\?\s*$/.test(pulito)) {
-    return "In questo momento non riesco a pensare. Riprova tra un attimo.";
+    return T("In questo momento non riesco a pensare. Riprova tra un attimo.");
   }
-  return "Ho sentito: " + pulito;
+  return T("Ho sentito: ") + pulito;
 }
 
 // ------------------------------------------------------------------- la chat
@@ -706,7 +706,7 @@ bottoneAvvio.addEventListener("click", async () => {
   }
   try { sessionStorage.setItem("ciro-prima-calibrazione", "1"); } catch (errore) { /* pazienza */ }
   accendi(false);
-  di("È la prima volta che ci sentiamo: ti guido in una calibrazione di cinquanta secondi.");
+  di(T("È la prima volta che ci sentiamo: ti guido in una calibrazione di cinquanta secondi."));
   avviaCalibrazione();
 });
 
@@ -776,10 +776,10 @@ const contaAttese = document.getElementById("conta-attese");
 
 function testoAttesa(secondi) {
   const minuti = Math.round((secondi || 0) / 60);
-  if (minuti < 1) return "adesso";
-  if (minuti < 60) return `da ${minuti} min`;
+  if (minuti < 1) return T("adesso");
+  if (minuti < 60) return T("da %d min", minuti);
   const ore = Math.floor(minuti / 60);
-  return ore < 24 ? `da ${ore} h ${minuti % 60} min` : `da ${Math.floor(ore / 24)} g`;
+  return ore < 24 ? T("da %d h %d min", ore, minuti % 60) : T("da %d g", Math.floor(ore / 24));
 }
 
 function disegnaAttese(elenco) {
@@ -788,20 +788,20 @@ function disegnaAttese(elenco) {
   if (!elenco.length) {
     const vuoto = document.createElement("li");
     vuoto.className = "vuoto";
-    vuoto.textContent = "nessuno: tutto in ordine";
+    vuoto.textContent = T("nessuno: tutto in ordine");
     pannelloAttese.appendChild(vuoto);
     return;
   }
   for (const attesa of elenco) {
     const riga = document.createElement("li");
     riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : "posta");
-    riga.title = "Clicca per rispondere a " + attesa.progetto;
+    riga.title = T("Clicca per rispondere a %s", attesa.progetto);
     const testa = document.createElement("div");
     testa.className = "attesa-testa";
     const progetto = document.createElement("b");
     progetto.textContent = attesa.progetto || "?";
     const quando = document.createElement("span");
-    quando.textContent = `${attesa.tipo} · ${testoAttesa(attesa.secondi)}`;
+    quando.textContent = `${T(attesa.tipo)} · ${testoAttesa(attesa.secondi)}`;
     testa.append(progetto, quando);
     const testo = document.createElement("p");
     testo.textContent = attesa.testo;
@@ -815,7 +815,7 @@ function disegnaAttese(elenco) {
         const pulsante = document.createElement("button");
         pulsante.type = "button";
         // come le dice la voce: numeri (le lettere si confondono), sì/no
-        pulsante.textContent = { A: "1", B: "2", C: "3", D: "4", E: "5", S: "Sì", N: "No" }[lettera] || lettera;
+        pulsante.textContent = { A: "1", B: "2", C: "3", D: "4", E: "5", S: T("Sì"), N: "No" }[lettera] || lettera;
         pulsante.title = spiegazione;
         pulsante.addEventListener("click", (evento) => {
           evento.stopPropagation();
@@ -829,7 +829,7 @@ function disegnaAttese(elenco) {
     // clic: apre la chat pronta per rispondere a quella sessione tramite Ciro
     riga.addEventListener("click", () => {
       chat.classList.add("aperta");
-      chatTesto.value = `Di' a ${attesa.progetto}: `;
+      chatTesto.value = T("Di' a %s: ", attesa.progetto);
       chatTesto.focus();
     });
     pannelloAttese.appendChild(riga);
@@ -846,7 +846,7 @@ function disegnaSessioni(elenco) {
   if (!elenco.length) {
     const vuoto = document.createElement("li");
     vuoto.className = "vuoto";
-    vuoto.textContent = "nessuna sessione aperta";
+    vuoto.textContent = T("nessuna sessione aperta");
     pannelloSessioni.appendChild(vuoto);
     return;
   }
@@ -870,10 +870,10 @@ function disegnaSessioni(elenco) {
     } else {
       nome.textContent = sessione.titolo || sessione.progetto;
     }
-    riga.title = (sessione.titolo || sessione.progetto) + " · cartella " + sessione.progetto;
+    riga.title = (sessione.titolo || sessione.progetto) + " · " + T("cartella") + " " + sessione.progetto;
     const mini = document.createElement("span");
     mini.className = "mini";
-    mini.textContent = `${sessione.stato} · ${testoAttesa(sessione.secondi)}`;
+    mini.textContent = `${T(sessione.stato)} · ${testoAttesa(sessione.secondi)}`;
     dati.append(nome, mini);
     if (sessione.sintesi) {
       const sintesi = document.createElement("span");
@@ -925,10 +925,10 @@ function disegnaPausa(pausa) {
   pulsantePausa.classList.toggle("attiva", attiva);
   pulsantePausa.setAttribute("aria-pressed", String(attiva));
   const tranne = attiva && pausa.solo && pausa.solo.length ? " tranne " + pausa.solo.join(", ") : "";
-  pulsantePausa.textContent = attiva ? "▶ Riprendi progetti" : "⏸ Pausa progetti";
+  pulsantePausa.textContent = T(attiva ? "▶ Riprendi progetti" : "⏸ Pausa progetti");
   pulsantePausa.title = attiva
-    ? "Progetti in pausa" + (tranne ? " (parlano solo:" + tranne.replace(" tranne", "") + ")" : "") + ". Premi per riprendere."
-    : "Ciro smette di annunciare le domande delle sessioni (restano nel pannello)";
+    ? T("Progetti in pausa") + (tranne ? T(" (parlano solo: %s)", pausa.solo.join(", ")) : "") + T(". Premi per riprendere.")
+    : T("Ciro smette di annunciare le domande delle sessioni (restano nel pannello)");
   adattaComandi();
 }
 pulsantePausa.addEventListener("click", async () => {
@@ -942,7 +942,31 @@ pulsantePausa.addEventListener("click", async () => {
   } catch (errore) { /* riprovo al prossimo clic */ }
 });
 
+// lingua: dal server (impostazione "lingua"); il pulsante IT/EN la cambia
+const pulsanteLingua = document.getElementById("lingua");
+function disegnaLingua(lingua) {
+  if (lingua && lingua !== LINGUA) {
+    applicaLingua(lingua);
+    interruttoreTesto.textContent = T(sveglia ? "Acceso" : "Spento");
+    const attuale = fase;
+    fase = null; // ridisegna lo stato nella nuova lingua
+    impostaFase(attuale);
+  }
+  pulsanteLingua.textContent = LINGUA === "en" ? "IT" : "EN";
+  pulsanteLingua.title = T("Passa all'inglese");
+}
+pulsanteLingua.addEventListener("click", async () => {
+  try {
+    await fetch("/api/lingua", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lingua: LINGUA === "en" ? "it" : "en" }),
+    });
+  } catch (errore) { /* riprovo al prossimo clic */ }
+  aggiornaQuadro();
+});
+
 function disegnaQuadro(dati) {
+  disegnaLingua(dati.lingua);
   disegnaPausa(dati.pausa);
   disegnaGuida(dati.guida);
   const calibrata = dati.microfono && Number(dati.microfono.soglia);
@@ -970,7 +994,7 @@ function mostraCredenziale(domanda) {
   if (credenzialeAperta === domanda.domanda_id || chiuseCredenziali.has(domanda.domanda_id)) return;
   credenzialeAperta = domanda.domanda_id;
   document.getElementById("credenziale-titolo").textContent =
-    "Credenziale per " + (domanda.progetto || "una sessione") + ": " + (domanda.testo || "");
+    T("Credenziale per %s: %s", domanda.progetto || T("una sessione"), domanda.testo || "");
   document.getElementById("credenziale-prefisso").textContent = "ciro-" + (domanda.progetto || "") + "-";
   document.getElementById("credenziale-nome").value = domanda.nome_credenziale || "";
   document.getElementById("credenziale-valore").value = "";
@@ -997,7 +1021,7 @@ moduloCredenziale.addEventListener("submit", async (evento) => {
     valore: campo.value,
   });
   campo.value = "";
-  esito.textContent = "Salvo…";
+  esito.textContent = T("Salvo…");
   try {
     const risposta = await fetch("/api/credenziale", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: corpo,
@@ -1007,10 +1031,10 @@ moduloCredenziale.addEventListener("submit", async (evento) => {
       chiudiCredenziale();
       aggiornaQuadro();
     } else {
-      esito.textContent = "Non salvata: " + (dati.errore || risposta.status) + ". Riscrivila.";
+      esito.textContent = T("Non salvata: %s. Riscrivila.", dati.errore || risposta.status);
     }
   } catch (errore) {
-    esito.textContent = "Il server non risponde. Riscrivila.";
+    esito.textContent = T("Il server non risponde. Riscrivila.");
   }
 });
 
@@ -1032,19 +1056,19 @@ function testoReset(reset) {
   }
   if (!data || isNaN(data)) return reset; // gia' scritto a parole ("tra 3h 59m")
   const minuti = Math.round((data - Date.now()) / 60000);
-  if (minuti <= 0) return "reset ora";
-  if (minuti < 60) return `reset tra ${minuti} min`;
+  if (minuti <= 0) return T("reset ora");
+  if (minuti < 60) return T("reset tra %d min", minuti);
   const ore = Math.floor(minuti / 60);
-  if (ore < 48) return `reset tra ${ore} h ${minuti % 60} min`;
-  return `reset tra ${Math.floor(ore / 24)} g ${ore % 24} h`;
+  if (ore < 48) return T("reset tra %d h %d min", ore, minuti % 60);
+  return T("reset tra %d g %d h", Math.floor(ore / 24), ore % 24);
 }
 
 function testoEta(secondi) {
   if (!secondi) return "";
   const minuti = Math.round((Date.now() / 1000 - secondi) / 60);
-  if (minuti < 2) return "adesso";
-  if (minuti < 60) return `${minuti} min fa`;
-  return `${Math.round(minuti / 60)} h fa`;
+  if (minuti < 2) return T("adesso");
+  if (minuti < 60) return T("%d min fa", minuti);
+  return T("%d h fa", Math.round(minuti / 60));
 }
 
 function disegnaConsumi(elenco) {
@@ -1052,7 +1076,7 @@ function disegnaConsumi(elenco) {
   if (!elenco.length) {
     const vuoto = document.createElement("p");
     vuoto.className = "vuoto";
-    vuoto.textContent = "nessun dato ancora: apri una sessione Claude Code o installa l'estensione Chrome";
+    vuoto.textContent = T("nessun dato ancora: apri una sessione Claude Code o installa l'estensione Chrome");
     pannelloConsumi.appendChild(vuoto);
     return;
   }
@@ -1073,7 +1097,7 @@ function disegnaConsumi(elenco) {
       const riga = document.createElement("div");
       riga.className = "barra-consumo";
       const etichetta = document.createElement("span");
-      etichetta.textContent = voce.nome || "";
+      etichetta.textContent = T(voce.nome || "");
       const traccia = document.createElement("span");
       traccia.className = "traccia";
       // la barra mostra quanto resta: rossa dal 25% in giu', gialla dal 50%
@@ -1097,7 +1121,7 @@ function disegnaConsumi(elenco) {
       const saldo = document.createElement("div");
       saldo.className = "voce";
       const etichetta = document.createElement("span");
-      etichetta.textContent = "Credito";
+      etichetta.textContent = T("Credito");
       const valore = document.createElement("b");
       valore.textContent = consumo.saldo;
       saldo.append(etichetta, valore);
@@ -1111,15 +1135,15 @@ function disegnaConsumi(elenco) {
     }
     pannelloConsumi.appendChild(blocco);
   }
-  // gli account claude.ai (Contoso, Ironworks Pro) arrivano solo dall'estensione Chrome
+  // gli account claude.ai arrivano solo dall'estensione Chrome
   const mancano = [];
-  if (!elenco.some((c) => c.fonte === "claude.ai")) mancano.push("gli altri account Claude");
+  if (!elenco.some((c) => c.fonte === "claude.ai")) mancano.push(T("gli altri account Claude"));
   if (!elenco.some((c) => c.fonte === "opencode-go")) mancano.push("OpenCode Go");
   if (!elenco.some((c) => c.fonte === "deepseek")) mancano.push("DeepSeek");
   if (mancano.length) {
     const avviso = document.createElement("p");
     avviso.className = "mancano";
-    avviso.textContent = "Mancano " + mancano.join(", ") + ": arrivano dall'estensione Chrome, da installare nei profili Contoso e Lavoro.";
+    avviso.textContent = T("Mancano %s: arrivano dall'estensione Chrome, da installare nei profili del browser.", mancano.join(", "));
     pannelloConsumi.appendChild(avviso);
   }
 }
@@ -1166,12 +1190,12 @@ function disegnaGuida(g) {
   sentito.textContent = "";
   dire.textContent = "";
   if (g.fase === "silenzio") {
-    spiegazione.textContent = contoSilenzio > 0 ? `Resta in silenzio… ${contoSilenzio}` : "Resta in silenzio";
+    spiegazione.textContent = contoSilenzio > 0 ? T("Resta in silenzio… %d", contoSilenzio) : T("Resta in silenzio");
   } else if (g.fase === "frasi") {
-    spiegazione.textContent = "Di':";
+    spiegazione.textContent = T("Di':");
     dire.textContent = `«${g.dire}»`;
     if (g.ultima) {
-      sentito.textContent = `Ho sentito: «${g.ultima.sentito}» ${g.ultima.ok ? "✓" : "✗"}`;
+      sentito.textContent = T("Ho sentito: «%s» %s", g.ultima.sentito, g.ultima.ok ? "✓" : "✗");
       sentito.className = g.ultima.ok ? "ok" : "no";
     }
   } else if (g.fase === "compiti") {
@@ -1227,10 +1251,10 @@ async function misuraSilenzio(secondi) {
   while (inCorso || coda.length) await new Promise((r) => setTimeout(r, 200));
   await new Promise((r) => setTimeout(r, 600));
   misurando = [];
-  stato.textContent = "Misuro il silenzio…";
+  stato.textContent = T("Misuro il silenzio…");
   for (contoSilenzio = secondi; contoSilenzio > 0; contoSilenzio--) {
     const testo = document.getElementById("guida-spiegazione");
-    if (testo) testo.textContent = `Resta in silenzio… ${contoSilenzio}`;
+    if (testo) testo.textContent = T("Resta in silenzio… %d", contoSilenzio);
     await new Promise((r) => setTimeout(r, 1000));
   }
   const campioni = misurando.slice().sort((a, b) => a - b);

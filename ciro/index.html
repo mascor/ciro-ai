@@ -201,7 +201,7 @@
   </svg>
 
   <div id="sottotitoli" aria-live="polite">
-    <p id="sotto-tu" class="vuoto"><b>Tu</b><span></span></p>
+    <p id="sotto-tu" class="vuoto"><b data-t="Tu">Tu</b><span></span></p>
     <p id="sotto-ciro" class="vuoto"><b>Ciro</b><span></span></p>
   </div>
 
@@ -211,25 +211,25 @@
     <p id="guida-dire"></p>
     <p id="guida-sentito"></p>
     <div class="guida-pulsanti">
-      <button type="button" id="guida-ripeti">Ripeti</button>
-      <button type="button" id="guida-ferma">Ferma</button>
-      <button type="button" id="guida-chiudi">Chiudi</button>
+      <button type="button" id="guida-ripeti" data-t="Ripeti">Ripeti</button>
+      <button type="button" id="guida-ferma" data-t="Ferma">Ferma</button>
+      <button type="button" id="guida-chiudi" data-t="Chiudi">Chiudi</button>
     </div>
   </section>
 
   <form id="credenziale" hidden autocomplete="off">
     <p id="credenziale-titolo"></p>
-    <label>Nome <span class="prefisso" id="credenziale-prefisso"></span>
+    <label><span data-t="Nome">Nome</span> <span class="prefisso" id="credenziale-prefisso"></span>
       <input id="credenziale-nome" required pattern="[a-z0-9][a-z0-9\-]{0,39}" spellcheck="false"></label>
-    <label>Valore <input id="credenziale-valore" type="password" required autocomplete="new-password"></label>
+    <label><span data-t="Valore">Valore</span> <input id="credenziale-valore" type="password" required autocomplete="new-password"></label>
     <div class="pulsanti">
-      <button type="submit">Salva nel Portachiavi</button>
-      <button type="button" id="credenziale-chiudi">Chiudi</button>
+      <button type="submit" data-t="Salva nel Portachiavi">Salva nel Portachiavi</button>
+      <button type="button" id="credenziale-chiudi" data-t="Chiudi">Chiudi</button>
     </div>
     <p id="credenziale-esito" aria-live="polite"></p>
   </form>
 
-  <div id="stato">Dormo…</div>
+  <div id="stato" data-t="Dormo…">Dormo…</div>
 
   <div id="sogni" aria-hidden="true">
     <span class="sogno" style="--x:21%;--y:26%;--d:0s">☾</span>
@@ -239,53 +239,54 @@
   </div>
 
   <aside id="pannello">
-    <h2>Quanto ti resta</h2>
+    <h2 data-t="Quanto ti resta">Quanto ti resta</h2>
     <div id="pannello-consumi"><p class="vuoto">—</p></div>
-    <h2 class="secondo">Ti aspettano <span id="conta-attese"></span></h2>
-    <ul id="pannello-attese"><li class="vuoto">nessuno</li></ul>
+    <h2 class="secondo"><span data-t="Ti aspettano">Ti aspettano</span> <span id="conta-attese"></span></h2>
+    <ul id="pannello-attese"><li class="vuoto" data-t="nessuno">nessuno</li></ul>
   </aside>
 
   <aside id="pannello-destra">
-    <h2>Sessioni <span id="conta-sessioni"></span></h2>
-    <ul id="pannello-sessioni"><li class="vuoto">nessuna sessione aperta</li></ul>
+    <h2><span data-t="Sessioni">Sessioni</span> <span id="conta-sessioni"></span></h2>
+    <ul id="pannello-sessioni"><li class="vuoto" data-t="nessuna sessione aperta">nessuna sessione aperta</li></ul>
   </aside>
 
   <div id="comandi-alto">
-    <button id="calibra" title="Calibrazione guidata del microfono e della voce (circa 40 secondi)">🎚 Calibra</button>
+    <button id="calibra" data-t-title="Calibrazione guidata del microfono e della voce (circa 50 secondi)" data-t="🎚 Calibra" title="Calibrazione guidata del microfono e della voce (circa 50 secondi)">🎚 Calibra</button>
 
-    <button id="pausa-progetti" title="Ciro smette di annunciare le domande delle sessioni (restano nel pannello)" aria-pressed="false">
-      ⏸ Pausa progetti
-    </button>
+    <button id="pausa-progetti" title="Ciro smette di annunciare le domande delle sessioni (restano nel pannello)" aria-pressed="false" data-t="⏸ Pausa progetti" data-t-title="Ciro smette di annunciare le domande delle sessioni (restano nel pannello)">⏸ Pausa progetti</button>
 
-    <button id="interruttore" title="Accendi / spegni Ciro (S)" aria-pressed="false">
-      <span class="pallino"></span><span id="interruttore-testo">Spento</span>
+    <button id="lingua" title="Passa all'inglese" aria-label="Lingua / Language">EN</button>
+
+    <button id="interruttore" data-t-title="Accendi / spegni Ciro (S)" title="Accendi / spegni Ciro (S)" aria-pressed="false">
+      <span class="pallino"></span><span id="interruttore-testo" data-t="Spento">Spento</span>
     </button>
   </div>
 </div>
 
 <div id="avvio" class="visibile">
   <div class="scheda">
-    <h1>Ciao, sono Ciro</h1>
-    <p>Ti ascolto, poi ti rispondo a voce.<br>Serve il permesso del microfono.</p>
-    <button id="bottone-avvio">Inizia</button>
-    <p class="nota">Puoi anche scrivermi: tocca la A in basso a destra.</p>
+    <h1 data-t="Ciao, sono Ciro">Ciao, sono Ciro</h1>
+    <p><span data-t="Ti ascolto, poi ti rispondo a voce.">Ti ascolto, poi ti rispondo a voce.</span><br><span data-t="Serve il permesso del microfono.">Serve il permesso del microfono.</span></p>
+    <button id="bottone-avvio" data-t="Inizia">Inizia</button>
+    <p class="nota" data-t="Puoi anche scrivermi: tocca la A in basso a destra.">Puoi anche scrivermi: tocca la A in basso a destra.</p>
   </div>
 </div>
 
-<button id="apri-chat" title="Chat scritta">A</button>
+<button id="apri-chat" data-t-title="Chat scritta" title="Chat scritta">A</button>
 
 <section id="chat">
   <header>
     <span>Chat</span>
-    <button id="chiudi-chat" title="Chiudi">×</button>
+    <button id="chiudi-chat" data-t-title="Chiudi" title="Chiudi">×</button>
   </header>
   <div id="chat-lista"></div>
   <form id="chat-form" autocomplete="off">
-    <input id="chat-testo" placeholder="Scrivi e premi Invio" />
-    <button type="submit">Invia</button>
+    <input id="chat-testo" data-t-placeholder="Scrivi e premi Invio" placeholder="Scrivi e premi Invio" />
+    <button type="submit" data-t="Invia">Invia</button>
   </form>
 </section>
 
+<script src="testi.js"></script>
 <script src="faccia.js"></script>
 </body>
 </html>
