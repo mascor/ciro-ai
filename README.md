@@ -248,9 +248,12 @@ microphone. Say "Ciro, mi senti?" ("Ciro, can you hear me?").
 | You say | Ciro does |
 |---|---|
 | "uno" / "due" / "tre" (or "A", "la B", "sì", "no") | answers the question it just read, in under a second, and says what it understood ("Mandato: due, fermati") |
+| "tre, sì" / "la tre: due" | answers question number three (every open question has a number: "Domanda tre, da …", **#3** on the panel) |
+| "domanda tre" | reads question three again; a short answer then goes to it |
 | "due per alpha-bot" | answers that project's question |
 | "annulla" / "rispondi due" (within 2 min) | sends a correction for the answer just given |
 
+Questions are numbered because whisper understands numbers far better than project names.
 Ciro reads the options as numbers ("uno, procedi; due, fermati"): in Italian the letters
 *bi, ci, di, vi* sound alike, while numbers do not. A letter said alone with three or more
 options gets a quick check ("Hai detto tre, …?").
