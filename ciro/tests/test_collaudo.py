@@ -42,18 +42,18 @@ class TestCalibrazione(BaseCollaudo):
         self.assertEqual(self.c.stato_guida()["fase"], "silenzio")
         # words said during the silence measurement are not commands
         self.assertEqual(self.c.gestisci("pausa progetti", 0.05)["risposta"], "Aspetta, sto misurando il silenzio.")
-        self.assertEqual(self.c.silenzio(0.002, 0.004, 0.01), "Ora ripeti dopo di me. A.")
+        self.assertEqual(self.c.silenzio(0.002, 0.004, 0.01), "Ora ripeti dopo di me: la A.")
         guida = self.c.stato_guida()
         self.assertEqual((guida["fase"], guida["passo"], guida["totale"], guida["dire"]), ("frasi", 1, 5, "A"))
 
     def test_frasi_giuste_e_sbagliate(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.003, 0.01)
-        self.assertEqual(self.c.gestisci("A.", 0.05)["risposta"], "B.")
+        self.assertEqual(self.c.gestisci("A.", 0.05)["risposta"], "Di': la B.")
         self.assertEqual(self.c.stato_guida()["ultima"], {"attesa": "A", "sentito": "A.", "ok": True})
-        self.assertEqual(self.c.gestisci("allora", 0.05)["risposta"], "Non ho capito bene. Ripeti: B.")
+        self.assertEqual(self.c.gestisci("allora", 0.05)["risposta"], "Non ho capito bene. Ripeti: la B.")
         self.assertEqual(self.c.stato_guida()["ultima"], {"attesa": "B", "sentito": "allora", "ok": False})
-        self.assertEqual(self.c.gestisci("Bi", 0.05)["risposta"], "Sì.")
+        self.assertEqual(self.c.gestisci("Bi", 0.05)["risposta"], "Di': sì.")
         self.assertEqual(modulo_cervello.leggi_impostazioni()["alias_lettere"], {"bi": "b"})
         self.assertEqual(self.c.frasi_sentite[1]["tentativi"], ["allora", "Bi"])
 
@@ -61,16 +61,16 @@ class TestCalibrazione(BaseCollaudo):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.003, 0.01)
         self.c.gestisci("casa", 0.05)
-        self.assertEqual(self.c.gestisci("cosa", 0.05)["risposta"], "B.")
+        self.assertEqual(self.c.gestisci("cosa", 0.05)["risposta"], "Di': la B.")
         self.assertFalse(self.c.frasi_sentite[0]["ok"])
 
     def test_silenzio_dell_utente_ripete_poi_salta(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.003, 0.01)
         self.avanti(21)
-        self.assertEqual(self.detti[-1], "Non ti ho sentito. Ripeti: A.")
+        self.assertEqual(self.detti[-1], "Non ti ho sentito. Ripeti: la A.")
         self.avanti(21)
-        self.assertEqual(self.detti[-1], "B.")
+        self.assertEqual(self.detti[-1], "Di': la B.")
 
     def test_fine_soglia_da_rumore_e_voce(self):
         self.c.avvia("calibrazione")
@@ -103,7 +103,7 @@ class TestCalibrazione(BaseCollaudo):
     def test_ripeti_e_ferma(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.003, 0.01)
-        self.assertEqual(self.c.ripeti(), "A.")
+        self.assertEqual(self.c.ripeti(), "Di': la A.")
         self.assertEqual(self.c.gestisci("basta calibrazione", 0.05)["risposta"], "Calibrazione fermata.")
         self.assertEqual(self.c.fase, "spento")
         self.assertEqual(self.pausa, {"attiva": False, "solo": []})
@@ -146,6 +146,16 @@ class TestCollaudoCompiti(BaseCollaudo):
         self.avanti(91)
         self.assertIn("Compito due", self.detti[-1])
         self.assertFalse(self.c.compiti[0]["ok"])
+
+
+class TestVoce(unittest.TestCase):
+    def test_lettere_pronunciate(self):
+        self.assertEqual(server.per_voce("A, procedi; B, fermati. Consiglia A."),
+                         "a, procedi; bi, fermati. Consiglia a.")
+        self.assertEqual(server.per_voce("Di': la B."), "Di': la bi.")
+        self.assertEqual(server.per_voce("Mandato: A."), "Mandato: a.")
+        # words and acronyms are not touched
+        self.assertEqual(server.per_voce("API e CPU, Alice"), "API e CPU, Alice")
 
 
 class TestCollaudoNelCervello(BaseCiro):

@@ -203,6 +203,7 @@ function sottotitolo(chi, testo) {
 // Divide in frasi: la prima parte subito, le altre si preparano mentre parla.
 // I pezzi molto corti si uniscono al seguente (la voce resta naturale).
 function dividiFrasi(testo) {
+  if (testo.length <= 160) return [testo]; // le risposte brevi restano intere: suonano meglio
   const pezzi = testo.split(/(?<=[.!?…])\s+/).map((p) => p.trim()).filter(Boolean);
   const frasi = [];
   for (const pezzo of pezzi) {
@@ -375,6 +376,7 @@ let inizioDiscorso = 0;
 let rumore = 0.004;
 let rumoreAppreso = 0;    // livello dei falsi allarmi: riscende piano (~3 minuti)
 let sogliaCalibrata = null; // dalla calibrazione guidata («Ciro, calibrati»)
+let calibrando = false;     // durante la calibrazione: niente ricariche e niente soglie apprese
 let misurando = null;       // campioni del silenzio mentre la calibrazione lo misura
 let attesaInvio = false;
 let filaForte = 0;        // fotogrammi di fila sopra la soglia (128 ms l'uno)
@@ -561,7 +563,7 @@ async function inviaDiscorso(pezzi) {
       // falso allarme: era rumore. La soglia sale al livello di quel rumore
       // (e riscende da sola quando la stanza torna silenziosa)
       const prima = rumoreAppreso;
-      rumoreAppreso = Math.min(0.012, Math.max(rumoreAppreso, livello * 0.6));
+      if (!calibrando) rumoreAppreso = Math.min(0.006, Math.max(rumoreAppreso, livello * 0.6));
       if (rumoreAppreso > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumoreAppreso.toFixed(4));
       impostaFase("ascolto");
       return;
@@ -706,7 +708,7 @@ async function controllaVersione() {
     if (versione === versioneCaricata) return;
     const occupato = fase === "parlo" || fase === "penso" || inCorso || parlando ||
       (document.activeElement === chatTesto && chatTesto.value.trim());
-    if (occupato) return; // riprovo al giro dopo
+    if (occupato || calibrando) return; // riprovo al giro dopo
     try {
       sessionStorage.setItem(CHIAVE_RIAVVIO, JSON.stringify({
         sveglia, microfono: micAttivo, chat: chat.classList.contains("aperta"),
@@ -1121,6 +1123,7 @@ const schedaGuida = document.getElementById("guida");
 let contoSilenzio = 0; // secondi rimasti mentre misura il silenzio
 
 function disegnaGuida(g) {
+  calibrando = Boolean(g && g.fase !== "fine");
   schedaGuida.hidden = !g;
   if (!g) return;
   document.getElementById("guida-titolo").textContent = g.titolo || "";

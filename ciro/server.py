@@ -118,12 +118,22 @@ def muto():
         return False
 
 
+LETTERE_DETTE = {"A": "a", "B": "bi", "C": "ci", "D": "di", "E": "e"}
+
+
+def per_voce(testo):
+    """Le lettere delle opzioni dette come nomi («B» -> «bi»): una lettera isolata
+    letta da Kokoro non si capisce. Parole e sigle restano come sono."""
+    return re.sub(r"(?<![\w'])([A-E])(?![\w'])", lambda m: LETTERE_DETTE[m.group(1)], testo or "")
+
+
 def parla_wav(testo, velocita=None):
     """Restituisce i byte del WAV con la voce che legge il testo."""
     testo = " ".join(testo.split())[:4000]
     if not testo:
         raise ValueError("testo vuoto")
     velocita = float(velocita or VELOCITA)
+    testo = per_voce(testo)
     chiave = hashlib.sha256((VOCE + "|%.2f|" % velocita + testo).encode("utf-8")).hexdigest()[:32]
     CACHE.mkdir(parents=True, exist_ok=True)
     percorso = CACHE / (chiave + ".wav")
@@ -153,7 +163,10 @@ def trascrivi(byte_audio):
         subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(grezzo),
                         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(pronto)],
                        check=True, timeout=60)
-        vad = ["--vad", "-vm", str(MODELLO_VAD)] if MODELLO_VAD.is_file() else []
+        # tarato sulla voce vera (19/11): con i valori predefiniti una «A» detta da
+        # sola (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
+        vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
+               if MODELLO_VAD.is_file() else [])
         esito = subprocess.run([WHISPER, "-m", str(MODELLO_WHISPER), "-l", LINGUA,
                                 "-nt", "-np", *vad, "-f", str(pronto)],
                                capture_output=True, text=True, timeout=180)

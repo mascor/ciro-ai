@@ -40,9 +40,10 @@ SPIEGAZIONE_COMPITI = [
 ]
 
 
-def detta(frase):
-    """The phrase as Ciro says it in a prompt: capital letter and full stop."""
-    return frase[:1].upper() + frase[1:] + "."
+def detta(frase, inizio="Di': "):
+    """How Ciro asks for a phrase: one sentence, a single letter as «la A»
+    (a letter alone is hard to understand with a synthetic voice)."""
+    return inizio + ("la " + frase if len(frase) == 1 else frase) + "."
 
 
 def normalizza(testo):
@@ -159,7 +160,7 @@ class Collaudo:
         self.rumore["soglia"] = provvisoria
         self.fase = "frasi"
         self._chiedi_frase()
-        return "Ora ripeti dopo di me. %s" % detta(FRASI[0])
+        return detta(FRASI[0], "Ora ripeti dopo di me: ")
 
     def _chiedi_frase(self):
         self.chiesta = self.orologio()
@@ -228,7 +229,7 @@ class Collaudo:
             return {"risposta": prossima, "azione": None, "mandato": False}
         self.ripetuta = True
         self.chiesta = self.orologio()
-        return {"risposta": "Non ho capito bene. Ripeti: %s" % detta(FRASI[self.indice]),
+        return {"risposta": "Non ho capito bene. %s" % detta(FRASI[self.indice], "Ripeti: "),
                 "azione": None, "mandato": False}
 
     # ------------------------------------------------------------ acceptance test
@@ -297,7 +298,7 @@ class Collaudo:
                 if not self.ripetuta:
                     self.ripetuta = True
                     self.chiesta = self.orologio()
-                    self.dire("Non ti ho sentito. Ripeti: %s" % detta(FRASI[self.indice]))
+                    self.dire("Non ti ho sentito. %s" % detta(FRASI[self.indice], "Ripeti: "))
                 else:
                     self._registra_frase(False)
                     prossima = self._prossima_frase()
