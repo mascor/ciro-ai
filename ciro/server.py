@@ -384,9 +384,10 @@ def attese(sessioni=None):
         if not sessione.get("aspetta_utente"):
             continue
         testo = (sessione.get("domanda") or "").strip()
+        a_voce = bool(testo)   # a voce solo le domande vere, non le righe di attesa
         if not testo:
             testo = "; ".join((sessione.get("attese_per_utente") or [])[:1]).strip()
-        elenco.append({"progetto": sessione.get("progetto"), "tipo": "domanda",
+        elenco.append({"progetto": sessione.get("progetto"), "tipo": "domanda", "a_voce": a_voce,
                        "testo": (testo or "aspetta una tua risposta")[:280],
                        "secondi": int(sessione.get("da_secondi") or 0)})
     try:
@@ -477,30 +478,37 @@ def _frase_avviso(voce):
     return "Da %s, serve una %s: %s. Come rispondo?" % (progetto, voce.get("tipo"), testo)
 
 
-def sorveglia_attese():
+def giro_avvisi():
+    """Un giro: dice le domande nuove delle sessioni e della posta."""
     global _visti
+    voci = attese()
+    chiavi = {_chiave(v): v for v in voci}
+    if _visti is None:
+        _visti = set(chiavi)  # all'avvio: quelle gia' presenti le dice se glielo chiedi
+    for chiave, voce in chiavi.items():
+        if chiave in _visti or voce.get("domanda_id"):
+            continue  # le domande strutturate le annuncia sorveglia_domande
+        if voce.get("a_voce") is False:
+            continue  # una riga di attesa, non una domanda: resta solo nel pannello
+        progetto = voce.get("progetto")
+        if time.time() - _ultimo_avviso.get(progetto, 0) < 90:
+            continue  # stessa sessione appena annunciata (sessione e posta insieme)
+        _ultimo_avviso[progetto] = time.time()
+        frase = _frase_avviso(voce)
+        with _coda_lock:
+            if len(_coda) < 10:
+                _coda.append({"testo": frase, "da": "avvisi", "chiave": chiave,
+                              "progetto": progetto, "quando": time.time()})
+        _cervello.annota_avviso(voce.get("progetto"), frase,
+                                domanda=voce.get("tipo") in ("domanda", "decisione"))
+        registra("avviso", testo=frase)
+    _visti = set(chiavi)
+
+
+def sorveglia_attese():
     while True:
         try:
-            voci = attese()
-            chiavi = {_chiave(v): v for v in voci}
-            if _visti is None:
-                _visti = set(chiavi)  # all'avvio: quelle gia' presenti le dice se glielo chiedi
-            for chiave, voce in chiavi.items():
-                if chiave in _visti or voce.get("domanda_id"):
-                    continue  # le domande strutturate le annuncia sorveglia_domande
-                progetto = voce.get("progetto")
-                if time.time() - _ultimo_avviso.get(progetto, 0) < 90:
-                    continue  # stessa sessione appena annunciata (sessione e posta insieme)
-                _ultimo_avviso[progetto] = time.time()
-                frase = _frase_avviso(voce)
-                with _coda_lock:
-                    if len(_coda) < 10:
-                        _coda.append({"testo": frase, "da": "avvisi", "chiave": chiave,
-                                      "progetto": progetto, "quando": time.time()})
-                _cervello.annota_avviso(voce.get("progetto"), frase,
-                                        domanda=voce.get("tipo") in ("domanda", "decisione"))
-                registra("avviso", testo=frase)
-            _visti = set(chiavi)
+            giro_avvisi()
         except Exception as errore:  # noqa: BLE001
             registra("errore-avvisi", errore=repr(errore)[:300])
         time.sleep(8)

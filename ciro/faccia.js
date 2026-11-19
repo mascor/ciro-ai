@@ -313,7 +313,7 @@ function accendi(saluta) {
     evento("errore-microfono", errore && errore.message);
     stato.textContent = "Microfono non disponibile";
   });
-  if (saluta !== false) di("Echo, sono sveglio.");
+  if (saluta !== false) di("Eccomi, sono sveglio.");
 }
 
 function spegni() {
