@@ -18,6 +18,14 @@ const EN_UI = {
   "Non ho capito": "I didn't understand",
   "Misuro il silenzio…": "Measuring the silence…",
   "Acceso": "On",
+  "Di' «Ciro»": "Say “Ciro”",
+  "Dimmi.": "Yes?",
+  "Ascolto: «Ciro»": "Listening: “Ciro”",
+  "Ascolto: sempre": "Listening: always",
+  "Ciro risponde solo se lo chiami per nome (e per 15 secondi dopo che ha parlato). Premi per tenerlo sempre in ascolto.":
+    "Ciro answers only when you call him by name (and for 15 seconds after he spoke). Press to keep him always listening.",
+  "Ciro ascolta tutto. Premi per farlo rispondere solo quando lo chiami «Ciro».":
+    "Ciro listens to everything. Press to make him answer only when you call him “Ciro”.",
   "Spento": "Off",
   "Accendi / spegni Ciro (S)": "Turn Ciro on / off (S)",
   "🎚 Calibra": "🎚 Calibrate",
@@ -33,7 +41,7 @@ const EN_UI = {
   "Passa all'inglese": "Switch to Italian",
   // start card, chat, subtitles
   "Ciao, sono Ciro": "Hi, I'm Ciro",
-  "Ti ascolto, poi ti rispondo a voce.": "I listen, then I answer out loud.",
+  "Chiamami per nome: «Ciro, …». Ti rispondo a voce.": "Call me by name: “Ciro, …”. I answer out loud.",
   "Serve il permesso del microfono.": "I need permission to use the microphone.",
   "Inizia": "Start",
   "Puoi anche scrivermi: tocca la A in basso a destra.": "You can also write to me: tap the A at the bottom right.",

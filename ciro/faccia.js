@@ -45,6 +45,24 @@ const FRASI_RICHIAMO = [
   "Ehi, ci sei? Sono ancora sveglio.",
   "Ti ricordo che sono acceso: se non ti servo, spegnimi.",
 ];
+// «Ehi Ciro»: di base Ciro risponde solo se lo chiami per nome; dopo che ha
+// parlato (o dopo il suo nome) la conversazione resta aperta 15 secondi.
+// Il pulsante «Ascolto» passa a «sempre in ascolto», come prima.
+const FINESTRA_CONVERSAZIONE = 15000;
+let modoAscolto = "nome";   // "nome" | "sempre"
+try { if (localStorage.getItem("ciro-ascolto") === "sempre") modoAscolto = "sempre"; } catch (errore) { /* resta "nome" */ }
+let finestraFino = 0;
+function serveNome() {
+  return modoAscolto === "nome" && !calibrando && performance.now() > finestraFino;
+}
+function apriFinestra() {
+  finestraFino = performance.now() + FINESTRA_CONVERSAZIONE;
+  aggiornaStatoAscolto();
+}
+function aggiornaStatoAscolto() {
+  if (sveglia && fase === "ascolto") stato.textContent = T(serveNome() ? "Di' «Ciro»" : "Ti ascolto");
+}
+setInterval(aggiornaStatoAscolto, 1000);
 let inclinazione = 0;
 let inclinazioneBersaglio = 0;
 let spostamentoX = 0;
@@ -76,7 +94,7 @@ function impostaFase(nuova) {
   scena.classList.toggle("ascolta", nuova === "ascolto");
   scena.classList.toggle("parla", nuova === "parlo");
   sopracciglia.classList.toggle("su", nuova === "ascolto" || nuova === "penso");
-  stato.textContent = T({
+  stato.textContent = T(nuova === "ascolto" && serveNome() ? "Di' «Ciro»" : {
     pronto: "Pronto",
     ascolto: "Ti ascolto",
     penso: "Un attimo",
@@ -237,6 +255,7 @@ function di(testo) {
 async function prossimo() {
   if (!coda.length) {
     inCorso = false;
+    if (sveglia) apriFinestra();   // ha appena parlato: puoi rispondere senza «Ciro»
     if (fase === "parlo") impostaFase(micAttivo ? "ascolto" : "pronto");
     return;
   }
@@ -509,6 +528,7 @@ let inizioVoceCiro = 0;
 function interrompiCiro(adesso) {
   evento("interruzione", "eco " + eco.toFixed(3) + ", frasi scartate " + coda.length);
   interrottoAlle = adesso;
+  apriFinestra();   // chi interrompe sta gia' parlando con Ciro
   fotogrammiSopra = 0;
   coda.length = 0;
   if (sorgente) {
@@ -575,7 +595,8 @@ async function inviaDiscorso(pezzi, pause) {
       body: wav,
     });
     if (!risposta.ok) throw new Error("trascrizione fallita");
-    const { testo } = await risposta.json();
+    const dato = await risposta.json();
+    let testo = dato.testo;
     let somma = 0;
     for (const pezzo of pezzi) for (let i = 0; i < pezzo.length; i++) somma += pezzo[i] * pezzo[i];
     const livello = Math.sqrt(somma / campioni);
@@ -586,6 +607,21 @@ async function inviaDiscorso(pezzi, pause) {
       if (!calibrando) rumoreAppreso = Math.min(0.006, Math.max(rumoreAppreso, livello * 0.6));
       else azioneGuida("ripeti"); // in calibrazione una frase vuota si ripete subito
       if (rumoreAppreso > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumoreAppreso.toFixed(4));
+      impostaFase("ascolto");
+      return;
+    }
+    if (dato.chiamato) {           // «Ciro, …»: il nome apre la conversazione
+      apriFinestra();
+      if (!dato.resto) {           // solo «Ciro»: un fischio e ti ascolta
+        evento("chiamato", "");
+        fischia();
+        sottotitolo("ciro", T("Dimmi."));
+        impostaFase("ascolto");
+        return;
+      }
+      testo = dato.resto;
+    } else if (serveNome()) {      // non l'hai chiamato: rumore, tastiera, altre persone
+      evento("ignorato-senza-nome", testo.slice(0, 60));
       impostaFase("ascolto");
       return;
     }
@@ -968,6 +1004,24 @@ pulsantePausa.addEventListener("click", async () => {
   } catch (errore) { /* riprovo al prossimo clic */ }
 });
 
+// modo di ascolto: «Ciro» (risponde solo se chiamato) o sempre in ascolto
+const pulsanteAscolto = document.getElementById("modo-ascolto");
+function disegnaModoAscolto() {
+  pulsanteAscolto.textContent = T(modoAscolto === "nome" ? "Ascolto: «Ciro»" : "Ascolto: sempre");
+  pulsanteAscolto.title = T(modoAscolto === "nome"
+    ? "Ciro risponde solo se lo chiami per nome (e per 15 secondi dopo che ha parlato). Premi per tenerlo sempre in ascolto."
+    : "Ciro ascolta tutto. Premi per farlo rispondere solo quando lo chiami «Ciro».");
+  pulsanteAscolto.setAttribute("aria-pressed", String(modoAscolto === "sempre"));
+  aggiornaStatoAscolto();
+}
+pulsanteAscolto.addEventListener("click", () => {
+  modoAscolto = modoAscolto === "nome" ? "sempre" : "nome";
+  try { localStorage.setItem("ciro-ascolto", modoAscolto); } catch (errore) { /* solo per questa pagina */ }
+  evento("modo-ascolto", modoAscolto);
+  disegnaModoAscolto();
+});
+disegnaModoAscolto();
+
 // lingua: dal server (impostazione "lingua"); il pulsante IT/EN la cambia
 const pulsanteLingua = document.getElementById("lingua");
 function disegnaLingua(lingua) {
@@ -979,6 +1033,7 @@ function disegnaLingua(lingua) {
     impostaFase(attuale);
   }
   pulsanteLingua.textContent = LINGUA === "en" ? "IT" : "EN";
+  disegnaModoAscolto();
   pulsanteLingua.title = T("Passa all'inglese");
 }
 pulsanteLingua.addEventListener("click", async () => {

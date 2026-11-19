@@ -330,7 +330,7 @@ html, body {
   z-index: 22;
 }
 #comandi-alto button { white-space: nowrap; }
-#calibra, #lingua {
+#calibra, #lingua, #modo-ascolto {
   padding: 9px 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, .06);

@@ -247,6 +247,7 @@ microphone. Say "Ciro, mi senti?" ("Ciro, can you hear me?").
 
 | You say | Ciro does |
 |---|---|
+| "Ciro, …" / "Ehi Ciro" | wakes Ciro: by default he answers only when called by name, and for 15 seconds after he spoke (the **Ascolto** button switches to always listening) |
 | "uno" / "due" / "tre" (or "A", "la B", "sì", "no") | answers the question it just read, in under a second, and says what it understood ("Mandato: due, fermati") |
 | "tre, sì" / "la tre: due" | answers question number three (every open question has a number: "Domanda tre, da …", **#3** on the panel) |
 | "domanda tre" | reads question three again; a short answer then goes to it |

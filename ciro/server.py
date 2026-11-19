@@ -305,6 +305,19 @@ def solo_stop(testo):
     return bool(STOP_RE.match(testo or ""))
 
 
+# «Ehi Ciro»: Ciro risponde solo se lo chiami (o nei 15 s dopo che ha parlato).
+# Il nome all'inizio della frase, anche come lo scrive whisper (Kiro, Chiro, ciro').
+NOME_RE = re.compile(r"^\W*(?:(?:ehi|ehy|hey|ei|ok|okay|oh)\W+)?(?:ciro|kiro|chiro|cyro|ciroo|cirò)\b'?[\s,.:;!?]*", re.I)
+
+
+def togli_nome(testo):
+    """(chiamato, resto): «Ciro, come va?» -> (True, «come va?»)."""
+    trovato = NOME_RE.match(testo or "")
+    if not trovato:
+        return False, (testo or "").strip()
+    return True, (testo or "")[trovato.end():].strip()
+
+
 def solo_verso(testo):
     return bool(VERSO_RE.match(re.sub(r"[^a-z]", "", (testo or "").lower())))
 
@@ -1414,7 +1427,8 @@ class Gestore(BaseHTTPRequestHandler):
                     _ultimi_audio.append((testo, corpo))
                 registra("ascolto", testo=testo, audio_kb=len(corpo) // 1024,
                          secondi_trascrizione=round(time.time() - inizio, 1))
-                self._invia(200, json.dumps({"testo": testo}))
+                chiamato, resto = togli_nome(testo)
+                self._invia(200, json.dumps({"testo": testo, "chiamato": chiamato, "resto": resto}))
             elif percorso == "/api/messaggio":
                 dato = json.loads(corpo or b"{}")
                 testo = (dato.get("testo") or "").strip()
