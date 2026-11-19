@@ -326,6 +326,17 @@ class TestRisposteVeloci(BaseCiro):
         self.assertEqual(self.c.chiedi("no")["risposta"], "Mandato.")
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "N")
 
+    def test_si_accetta_l_opzione_consigliata(self):
+        identificativo = self.annunciata(raccomanda="B")
+        esito = self.c.chiedi("sì")
+        self.assertEqual(esito["risposta"], "Mandato: B.")
+        self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "B")
+
+    def test_si_senza_consiglio_chiede_la_lettera(self):
+        identificativo = self.annunciata(raccomanda=None)
+        self.assertIn("A, B", self.c.chiedi("sì")["risposta"])
+        self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
+
     def test_lettera_non_tra_le_opzioni(self):
         identificativo = self.annunciata()
         esito = self.c.chiedi("C")
