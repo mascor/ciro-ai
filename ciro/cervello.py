@@ -401,6 +401,29 @@ RIPRESA_RE = re.compile(r"^(?:riprendi|riattiva|togli la pausa)(?: (?:ai |i |dei
 IMPOSTA_RE = re.compile(r"^\s*IMPOSTA\s*:\s*(riepilogo)\s*\|\s*(\d{1,4})", re.IGNORECASE)
 
 
+def profilo_voce():
+    """Il profilo della voce dell'utente (docs/voice-profile-design.md)."""
+    return dict(leggi_impostazioni().get("profilo_voce") or {})
+
+
+def aggiorna_profilo(**campi):
+    profilo = profilo_voce()
+    profilo.update(campi)
+    imposta("profilo_voce", profilo)
+    return profilo
+
+
+def impara_confusione(sentito, giusta):
+    """Whisper ha scritto `sentito` quando l'utente diceva `giusta`."""
+    sentito = re.sub(r"[^\w'àèéìòù]+", " ", (sentito or "").lower()).strip()
+    if not sentito or sentito == giusta:
+        return
+    profilo = profilo_voce()
+    confusioni = dict(profilo.get("confusioni") or {})
+    confusioni[sentito] = giusta
+    aggiorna_profilo(confusioni=confusioni)
+
+
 def leggi_impostazioni():
     dati = dict(IMPOSTAZIONI_PREDEFINITE)
     try:
@@ -508,7 +531,9 @@ class Cervello:
         self.annunciate = {}           # ID -> ora in cui Ciro l'ha detta
         self.lettera_sospesa = None    # lettera detta senza progetto, con piu' domande aperte
         self.autorizzazione_in_attesa = None  # scheda di un deploy di prova: «B» da confermare
-        self.conferma_lettera = None   # (scheda, lettera): «Hai detto tre?» su una lettera ambigua
+        self.conferma_lettera = None   # (scheda, lettera, sentito): «Hai detto tre?» su una risposta incerta
+        self.sentito_per_risposta = {}  # ID -> cosa aveva capito whisper (per imparare dalle correzioni)
+        self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
         # cosa ha detto Ciro per ultimo: le risposte brevi («sì», «A», «rispondi B»)
         # vanno solo li'. tipo: domanda, automatica, avviso, proposta, mandato
         self.ultimo_detto = None
@@ -579,7 +604,7 @@ class Cervello:
         trovate = [s for s in self.domande_in_attesa.values() if detto and _norma(s.get("progetto")) == detto]
         return trovate[-1] if trovate else None
 
-    def _manda(self, scheda, scelta, testo_detto, motivo="utente"):
+    def _manda(self, scheda, scelta, testo_detto, motivo="utente", sentito=None):
         posta, _, _ = _moduli_posta()
         try:
             posta.rispondi_domanda(scheda["id"], scelta, None, motivo, "opencode")
@@ -591,6 +616,8 @@ class Cervello:
         self.domande_in_attesa.pop(scheda["id"], None)
         self.lettera_sospesa = None
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
+        self.sentito_per_risposta[scheda["id"]] = sentito or re.sub(
+            r"[^\w'àèéìòù]+", " ", (testo_detto or "").lower()).strip()
         self.decisioni_mandate[scheda.get("progetto")] = time.time()
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
         # dice cosa ha capito: se e' sbagliato lo senti subito («annulla» entro 2 minuti)
@@ -627,6 +654,11 @@ class Cervello:
                 return self._detto(testo, "Le opzioni erano %s." % ", ".join(opzioni), False)
             corpo = ("Correzione dell'utente alla domanda %s: la risposta giusta e' %s) %s."
                      % (scheda["id"], correzione, opzioni[correzione]))
+            # whisper aveva capito male una risposta brevissima: lo ricordo (profilo voce)
+            sentito = self.sentito_per_risposta.get(scheda["id"]) or ""
+            if sentito and len(sentito) <= 3 and " " not in sentito:
+                impara_confusione(sentito, nome_opzione(correzione))
+                self.da_imparare = {"sentito": sentito, "giusta": nome_opzione(correzione)}
         try:
             posta.invia("opencode", scheda["progetto"], "decisione",
                         "Correzione: %s" % (scheda.get("oggetto") or scheda["id"]), corpo,
@@ -706,10 +738,10 @@ class Cervello:
 
         # «Hai detto tre?» dopo una lettera ambigua: «sì» la manda, il numero la corregge
         if self.conferma_lettera:
-            scheda, lettera_ambigua = self.conferma_lettera
+            scheda, lettera_ambigua, sentito_prima = self.conferma_lettera
             self.conferma_lettera = None
             if detto in ("si", "sì") or e_conferma(detto):
-                return self._manda(scheda, lettera_ambigua, testo)
+                return self._manda(scheda, lettera_ambigua, testo, sentito=sentito_prima)
             if NO_RE.match(detto):
                 return self._detto(testo, "Va bene. Dimmi il numero: %s." % elenco_opzioni(
                     opzioni_per_voce(scheda)), False)
@@ -738,6 +770,16 @@ class Cervello:
             lettera = "no" if detto == "no" else "si"
         if lettera is None:
             lettera = self._lettera_da_parole(detto_parole)   # «procedi» al posto di «A»
+        # errori tipici di questa voce (profilo): si chiede conferma invece di indovinare
+        confusioni = profilo_voce().get("confusioni") or {}
+        da_confermare = detto_parole in confusioni
+        alternativa = None
+        if da_confermare:
+            probabile, _ = numeri_in_lettere(confusioni[detto_parole])
+            alternativa = probabile.upper() if len(probabile) == 1 else (
+                "si" if probabile in ("si", "sì") else "no" if probabile == "no" else None)
+            if lettera is None:
+                lettera = alternativa
         if lettera is None:
             return None
 
@@ -752,7 +794,8 @@ class Cervello:
             scheda = self._progetto_esatto(progetto)
             if scheda is None:
                 return None  # «e alla fine ...»: una frase, non una risposta
-            return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero)
+            return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero,
+                                          conferma=da_confermare, alternativa=alternativa, sentito=detto_parole)
 
         if lettera not in ("si", "no") and not any(lettera in opzioni_per_voce(s)
                                                    for s in self.domande_in_attesa.values()):
@@ -763,7 +806,8 @@ class Cervello:
             scheda = next(iter(self.domande_in_attesa.values()))
             # dopo un riavvio Ciro non ha ancora detto nulla: c'e' una sola domanda
             if ultimo == {} or (ultimo.get("tipo") == "domanda" and ultimo.get("id") == scheda["id"]):
-                return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero)
+                return self._rispondi_lettera(scheda, lettera, testo, ambigua=bool(trovata) and not era_numero,
+                                          conferma=da_confermare, alternativa=alternativa, sentito=detto_parole)
         self.lettera_sospesa = lettera
         return self._detto(testo, "Per quale progetto?", False)
 
@@ -801,14 +845,30 @@ class Cervello:
                 return lettera
         return None
 
-    def _rispondi_lettera(self, scheda, lettera, testo, ambigua=False):
+    def _valida(self, scheda, lettera):
+        """La lettera dell'opzione corrispondente (sì/no -> S/N), o None."""
+        opzioni = opzioni_per_voce(scheda)
+        if lettera in ("si", "no"):
+            return ("S" if lettera == "si" else "N") if set(opzioni) >= {"S", "N"} else None
+        return lettera if lettera in opzioni else None
+
+    def _chiedi_conferma(self, scheda, lettera, testo, sentito):
+        self.conferma_lettera = (scheda, lettera, sentito)
+        return self._detto(testo, "Hai detto %s, %s? Di' sì, oppure il numero." % (
+            nome_opzione(lettera), opzioni_per_voce(scheda)[lettera]), False)
+
+    def _rispondi_lettera(self, scheda, lettera, testo, ambigua=False, conferma=False,
+                          alternativa=None, sentito=None):
         self.lettera_sospesa = None
         opzioni = opzioni_per_voce(scheda)
+        if conferma:   # un errore tipico di questa voce: conferma con l'ipotesi valida
+            for candidata in (lettera, alternativa):
+                valida = self._valida(scheda, candidata) if candidata else None
+                if valida:
+                    return self._chiedi_conferma(scheda, valida, testo, sentito)
         if ambigua and lettera in LETTERE_AMBIGUE and len(opzioni) >= 3 and lettera in opzioni:
             # una lettera detta da sola con tre o piu' opzioni: B, C, D si scambiano
-            self.conferma_lettera = (scheda, lettera)
-            return self._detto(testo, "Hai detto %s, %s? Di' sì, oppure il numero." % (
-                nome_opzione(lettera), opzioni[lettera]), False)
+            return self._chiedi_conferma(scheda, lettera, testo, sentito)
         if lettera in ("si", "no"):
             if set(opzioni) >= {"S", "N"}:
                 lettera = "S" if lettera == "si" else "N"
@@ -830,7 +890,7 @@ class Cervello:
             condizioni = ", ".join(scheda.get("condizioni") or []) or "nessuna condizione"
             return self._detto(testo, "Salvo: %s, deploy di prova, dopo %s. Confermi?"
                                % (scheda["progetto"], condizioni), False)
-        return self._manda(scheda, lettera, testo)
+        return self._manda(scheda, lettera, testo, sentito=sentito)
 
     def _domanda_aperta_di(self, progetto):
         """La domanda strutturata ancora senza risposta di un progetto, se c'e'."""

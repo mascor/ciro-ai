@@ -534,7 +534,7 @@ class TestRisposteVeloci(BaseCiro):
 
     def test_confusione_su_domanda_si_no(self):
         modulo_cervello.aggiorna_profilo(confusioni={"c": "sì"})
-        self.annunciata(opzioni={"S": "procedi", "N": "fermati"})
+        self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
         self.assertEqual(self.c.chiedi("C")["risposta"], "Hai detto sì, procedi? Di' sì, oppure il numero.")
 
     def test_risposta_chiara_non_chiede(self):
