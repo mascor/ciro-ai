@@ -641,5 +641,29 @@ class TestCodaAlRisveglio(BaseCiro):
         self.assertEqual(len(server.filtra_coda(voci, attuali=chiavi)), 3)
 
 
+class TestAvvisiSoloDomande(BaseCiro):
+    """Ciro speaks only real questions of a session, not its waiting lines."""
+
+    def avvisi_con(self, sessione):
+        modulo_cervello.leggi_sessioni = lambda: [sessione]
+        server._visti = set()
+        server._ultimo_avviso.clear()
+        server.giro_avvisi()
+        return [v["testo"] for v in self.coda()]
+
+    def test_riga_di_attesa_non_si_dice(self):
+        detti = self.avvisi_con({"progetto": "tools", "aspetta_utente": True, "da_secondi": 5, "domanda": "",
+                                 "attese_per_utente": ["Utente, che deve rispondere A a Ciro"]})
+        self.assertEqual(detti, [])
+        # still listed on the left panel
+        self.assertEqual([v["progetto"] for v in server.attese()], ["tools"])
+
+    def test_domanda_vera_si_dice(self):
+        detti = self.avvisi_con({"progetto": "tools", "aspetta_utente": True, "da_secondi": 5,
+                                 "domanda": "Procedo con il deploy di prova? (S/N)", "attese_per_utente": []})
+        self.assertEqual(len(detti), 1)
+        self.assertIn("Procedo con il deploy di prova", detti[0])
+
+
 if __name__ == "__main__":
     unittest.main()
