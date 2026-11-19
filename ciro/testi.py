@@ -149,4 +149,12 @@ EN = {
     "Non c'è una domanda %s. %s": "There is no question %s. %s",
     "Quella domanda è già chiusa.": "That question is already closed.",
     "Eccomi, sono sveglio.": "Here I am, I'm awake.",
+    # safety: closed numbers, unheard questions, model actions
+    "La %s, di %s, è già chiusa. %s": "Number %s, from %s, is already closed. %s",
+    "Prima te la dico. La %s: %s. Ripeti la risposta.": "Let me read it first. Number %s: %s. Say your answer again.",
+    "Il messaggio è troppo lungo per leggertelo. Dimmelo più corto.":
+        "The message is too long to read back to you. Tell me a shorter one.",
+    "Lettura non riuscita": "Read failed",
+    "Non riesco a leggere i messaggi non letti: ricarica la scheda di Google Chat.":
+        "I can't read the unread messages: reload the Google Chat tab.",
 }

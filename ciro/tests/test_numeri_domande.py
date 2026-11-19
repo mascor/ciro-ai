@@ -30,7 +30,7 @@ class TestNumeriDomande(BaseCiro):
         self.assertEqual(numeri, {seconda: 2})
         terza = self.apri("atlas")
         numeri = {v["domanda_id"]: v["numero"] for v in server.attese() if v.get("domanda_id")}
-        self.assertEqual(numeri, {seconda: 2, terza: 1})
+        self.assertEqual(numeri, {seconda: 2, terza: 3})   # number 1 rests (numeri.RIPOSO)
 
     def test_risposta_per_numero_va_alla_domanda_giusta(self):
         prima = self.apri("ironworks")
@@ -90,7 +90,12 @@ class TestNumeriDomande(BaseCiro):
                     azione="decisione")
         voci = server.attese()
         numero = [v["numero"] for v in voci if v["progetto"] == "contoso"][0]
-        esito = server._cervello.chiedi("%s sì" % ["", "uno", "due", "tre"][numero])
+        detto = "%s sì" % ["", "uno", "due", "tre"][numero]
+        esito = server._cervello.chiedi(detto)
+        # only on the panel, never said aloud: Ciro reads it first (safety review 19/11/2026)
+        self.assertFalse(esito["mandato"], esito)
+        self.assertIn("Prima te la dico", esito["risposta"])
+        esito = server._cervello.chiedi(detto)
         self.assertTrue(esito["mandato"], esito)
         self.assertEqual(len(self.messaggi_a("contoso")), 1)
 

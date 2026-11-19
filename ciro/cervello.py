@@ -30,6 +30,7 @@ POSTA_SCRIPT = Path(os.environ.get("CIRO_POSTA_SCRIPT") or RADICE_PROGETTO / "po
 MODELLO = os.environ.get("FACCIA_MODELLO") or "deepseek/deepseek-flash"
 CASSELLA = "opencode"
 RISPOSTA_MASSIMA = 520
+TESTO_DA_CONFERMARE_MAX = 300   # un messaggio da confermare si legge tutto: oltre, e' troppo lungo
 
 RADICE_POSTA = Path.home() / ".posta-agenti"
 PREFISSO_OGGETTO = "[faccia] "
@@ -464,7 +465,11 @@ def _norma(testo):
 IMPOSTAZIONI = Path(os.environ.get("FACCIA_IMPOSTAZIONI") or (Path.home() / ".config/faccia/impostazioni.json"))
 IMPOSTAZIONI_PREDEFINITE = {"riepilogo": 30,          # minuti; 0 = spento
                             "pausa_progetti": False,  # niente annunci delle sessioni...
-                            "solo_progetti": []}      # ...tranne questi
+                            "solo_progetti": [],      # ...tranne questi
+                            # Google Chat: i messaggi diretti vanno al modello per l'urgenza
+                            # (scelta dell'utente del 19/11/2026); il loro testo nel registro no
+                            "chat_al_modello": True,
+                            "chat_nel_registro": False}
 PAUSA_RE = re.compile(r"^(?:(?:metti in |metti |attiva la )?pausa (?:ai |i |sui |dei )?progetti(?: tranne (.+))?"
                       r"|(?:pause|mute) (?:the )?projects(?: except (.+))?)$")
 RIPRESA_RE = re.compile(r"^(?:(?:riprendi|riattiva|togli la pausa)(?: (?:ai |i |dei )?progetti)?"
@@ -963,6 +968,7 @@ class Cervello:
             if voce is None:
                 return self._detto(testo, self._non_ce(numero), False)
             # «domanda tre»: la ridice, e le risposte brevi vanno a lei
+            self.numeri.segna_detta(voce["chiave"])
             if voce.get("domanda_id"):
                 self.domanda_corrente = voce["domanda_id"]
                 self.ultimo_detto = {"tipo": "richiamata", "id": voce["domanda_id"], "ora": time.time()}
@@ -987,9 +993,24 @@ class Cervello:
         return self._rispondi_numerata(voce, lettera, testo, detto)
 
     def _non_ce(self, numero):
+        chiusa = self.numeri.chiusa(numero)
+        if chiusa:   # appena chiusa: il numero riposa, non va a un'altra domanda
+            return t("La %s, di %s, è già chiusa. %s") % (
+                modulo_numeri.parola(numero, lingua()), chiusa.get("progetto") or "?", self._quale_domanda())
         return t("Non c'è una domanda %s. %s") % (modulo_numeri.parola(numero, lingua()), self._quale_domanda())
 
     def _rispondi_numerata(self, voce, lettera, testo, detto):
+        if not voce.get("detta"):
+            # una risposta va solo a una domanda che l'utente ha sentito: prima la dico
+            self.numeri.segna_detta(voce["chiave"])
+            if voce.get("domanda_id"):
+                self.domanda_corrente = voce["domanda_id"]
+                self.ultimo_detto = {"tipo": "richiamata", "id": voce["domanda_id"], "ora": time.time()}
+            else:
+                self.ultimo_detto = {"tipo": "avviso", "id": voce.get("progetto"), "ora": time.time()}
+            return self._detto(testo, t("Prima te la dico. La %s: %s. Ripeti la risposta.") % (
+                modulo_numeri.parola(voce["numero"], lingua()),
+                voce.get("frase") or voce.get("progetto") or "?"), False)
         if voce.get("domanda_id"):
             scheda = self.domande_in_attesa.get(voce["domanda_id"])
             if scheda is None:
@@ -1036,6 +1057,33 @@ class Cervello:
             if _norma(testo) and _norma(testo) == _norma(detto):
                 return lettera
         return None
+
+    def _scelta_detta(self, scheda, testo):
+        """La lettera che l'utente ha detto davvero (dalle sue parole, mai dal
+        modello), tra quelle che Ciro dice per questa domanda. None se non si capisce."""
+        dette = opzioni_per_voce(scheda)
+        detto = re.sub(r"[^\w'àèéìòù]+", " ", (testo or "").lower()).strip()
+        convertito, _ = numeri_in_lettere(detto)
+        parole = [w for w in convertito.split() if w not in PAROLE_PRIMA]
+        if parole:
+            primo = LETTERE_SENTITE.get(parole[0], parole[0])
+            if len(primo) == 1 and primo.upper() in dette:
+                return primo.upper()
+            if primo in ("si", "sì", "yes") and "S" in dette:
+                return "S"
+            if primo == "no" and "N" in dette:
+                return "N"
+        for lettera, frase in dette.items():
+            if _norma(frase) and _norma(frase) == _norma(detto):
+                return lettera
+        return None
+
+    def _nomina(self, casella, testo):
+        """L'utente ha nominato questo progetto nelle sue parole?"""
+        def parole(x):
+            return " %s " % re.sub(r"[^a-z0-9]+", " ", (x or "").lower()).strip()
+        nome = parole(casella).strip()
+        return bool(nome) and (" %s " % nome) in parole(testo)
 
     def _valida(self, scheda, lettera):
         """La lettera dell'opzione corrispondente (sì/no -> S/N), o None."""
@@ -1435,27 +1483,51 @@ class Cervello:
                     tolta = re.sub(r"^\d{2}/\d{2}/\d{4}:\s*", "", tolta)
                     risposta = (risposta + t(" Ho tolto la regola: %s") % tolta).strip()
 
+        # Il modello sceglie solo il destinatario e propone: cio' che parte senza
+        # «Confermi?» e' fatto di parole dell'utente, controllate qui. Un testo arrivato
+        # da una sessione o da una chat non puo' cosi' far partire un ordine.
         if azione:
             casella = trova_casella(azione["a"])
             strutturata = casella and azione["tipo"] == "decisione" and self._domanda_aperta_di(casella)
             if strutturata:
                 # risposta a una domanda strutturata aperta: parte subito, senza «Confermi?»,
-                # solo se la lettera e' chiara (altrimenti Ciro la chiede)
+                # solo se la lettera e' nelle parole dell'utente (altrimenti Ciro la chiede)
                 self.domande_aperte.pop(casella, None)
                 self.azione_in_attesa = None
+                dette = opzioni_per_voce(strutturata)
+                detta = self._scelta_detta(strutturata, testo)
+                del_modello = (azione.get("scelta") or "").strip().upper()[:1]
+                if detta is None:
+                    if del_modello in dette and dette != OPZIONI_DEPLOY_PROVA:
+                        self.conferma_lettera = (strutturata, del_modello, None)
+                        domanda = t("Hai detto %s, %s? Di' sì, oppure il numero.") % (
+                            nome_opzione(del_modello), dette[del_modello])
+                    else:
+                        domanda = t("Per mandarla mi serve il numero: %s.") % elenco_opzioni(dette)
+                    self.storico.append(("faccia", domanda))
+                    return {"risposta": domanda, "azione": None, "mandato": False}
+                azione = dict(azione, scelta=detta, testo=testo)   # la nota e' la sua, parola per parola
                 esito = self._invia(azione)
                 self.storico.append(("faccia", esito))
                 return {"risposta": esito, "azione": azione, "mandato": esito.startswith(t("Mandato"))}
-            if casella and azione["tipo"] == "decisione" and casella in self.domande_aperte:
-                # risposta a una domanda che Ciro gli ha appena riportato: parte subito
+            if (casella and azione["tipo"] == "decisione" and casella in self.domande_aperte
+                    and (len(self.domande_aperte) == 1 or self._nomina(casella, testo))):
+                # risposta a una domanda che Ciro gli ha appena riportato: parte subito,
+                # con le sue parole (non quelle del modello)
                 self.domande_aperte.pop(casella, None)
                 self.azione_in_attesa = None
+                azione = dict(azione, a=casella, testo="%s (risposta di %s, detta a Ciro)" % (testo, NOME_UTENTE))
                 esito = self._invia(azione)
                 if esito.startswith("Non sono riuscito") or "mand" not in risposta.lower():
                     risposta = esito  # errore o risposta muta: dico l'esito vero
                 self.storico.append(("faccia", risposta))
                 return {"risposta": risposta, "azione": azione, "mandato": True}
-            if casella:
+            if casella and len(azione["testo"]) > TESTO_DA_CONFERMARE_MAX:
+                # parte solo cio' che l'utente ha sentito per intero
+                risposta = t("Il messaggio è troppo lungo per leggertelo. Dimmelo più corto.")
+                azione = None
+                self.azione_in_attesa = None
+            elif casella:
                 azione["a"] = casella
                 azione["descrizione"] = "mandare a %s: %s" % (casella, azione["testo"])
                 self.azione_in_attesa = azione
@@ -1464,7 +1536,7 @@ class Cervello:
                 frasi = [f for f in re.split(r"(?<=[.!?])\s+", risposta) if f and not f.endswith("?")]
                 frasi = [f for f in frasi if not re.match(r"(?i)^(fatto|mandato|inviato)\b", f)]
                 risposta = (" ".join(frasi) + " " + t("Lo mando a %s: %s. Confermi?") % (
-                    casella, azione["testo"][:160].rstrip("."))).strip()
+                    casella, azione["testo"].rstrip("."))).strip()
             else:
                 risposta = t("Non trovo nessuna sessione che si chiama %s. A chi lo mando?") % azione["a"]
                 azione = None

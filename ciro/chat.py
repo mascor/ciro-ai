@@ -17,6 +17,7 @@ from pathlib import Path
 DURATA = 2 * 3600          # a conversation leaves the panel after 2 hours
 ASSENTE = 5 * 60           # a profile silent for 5 minutes: its Chat tab is closed
 PROMEMORIA = 15 * 60       # urgent and unanswered: reminded every 15 minutes
+FALLITA_DOPO = 2 * 60      # a profile whose Chat list is not found for 2 minutes: shown as a failed read
 
 _TECNICHE = re.compile(
     r"^(?:\d{1,2}[:.]\d{2}|\d+|unread|non lett\w*|oggi|ieri|today|yesterday|"
@@ -81,6 +82,7 @@ class Chat:
         dati.setdefault("conversazioni", {})
         dati.setdefault("account", {})
         dati.setdefault("chiuse", {})
+        dati.setdefault("letture", {})     # account -> {"ok": bool, "dal": first failure}
         return dati
 
     def _scrivi(self, dati):
@@ -98,6 +100,7 @@ class Chat:
         with self._lock:
             dati = self._leggi()
             dati["account"][account] = adesso
+            dati["letture"][account] = {"ok": True, "dal": None}
             presenti = set()
             for conv in conversazioni or []:
                 ident = str(conv.get("conversazione") or "")
@@ -123,6 +126,28 @@ class Chat:
                 del dati["chiuse"][chiave]
             self._scrivi(dati)
         return nuove
+
+    def lettura_fallita(self, account, adesso=None):
+        """The extension did not find the unread list: this is not «no messages».
+        The conversations already known stay; the profile is marked as failing."""
+        adesso = time.time() if adesso is None else adesso
+        account = str(account or "?")
+        with self._lock:
+            dati = self._leggi()
+            dati["account"][account] = adesso
+            lettura = dati["letture"].get(account) or {}
+            if lettura.get("ok", True) or not lettura.get("dal"):
+                dati["letture"][account] = {"ok": False, "dal": adesso}
+                self._scrivi(dati)
+
+    def letture_fallite(self, adesso=None):
+        """{account: seconds since the reads started failing}, only past FALLITA_DOPO."""
+        adesso = time.time() if adesso is None else adesso
+        fallite = {}
+        for account, lettura in self._leggi()["letture"].items():
+            if not lettura.get("ok", True) and lettura.get("dal") and adesso - lettura["dal"] >= FALLITA_DOPO:
+                fallite[account] = int(adesso - lettura["dal"])
+        return fallite
 
     def imposta_urgenza(self, chiave, esito):
         with self._lock:

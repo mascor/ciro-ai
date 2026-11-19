@@ -666,6 +666,12 @@ def attese(sessioni=None):
                        "risposta": voce.get("risposta"), "motivo": voce.get("motivo"),
                        "testo": (voce.get("testo") or "")[:280], "a_voce": False,
                        "secondi": int(adesso_s - voce.get("visto", adesso_s))})
+    for account, secondi in _chat.letture_fallite(adesso_s).items():
+        # zero messaggi e lettura fallita sono diversi: questa si vede nel pannello
+        elenco.append({"progetto": "chat", "tipo": "chat", "chat_id": "lettura|" + account,
+                       "account": account, "mittente": t("Lettura non riuscita"),
+                       "testo": t("Non riesco a leggere i messaggi non letti: ricarica la scheda di Google Chat."),
+                       "urgente": False, "a_voce": False, "secondi": secondi})
     # prima chi aspetta da piu' tempo; i messaggi di Chat non urgenti in fondo
     elenco.sort(key=lambda v: (v.get("tipo") == "chat" and not v.get("urgente"), -v["secondi"]))
     numera(elenco)
@@ -741,6 +747,7 @@ def _frase_avviso(voce):
 # accanto al contesto di Ciro (~/.config/faccia): un Ciro di prova ha il suo
 _chat = modulo_chat.Chat(lambda: Path(modulo_cervello.CONTESTO).with_name("chat.json"))
 _promemoria_chat = {}   # chiave -> ultima volta che Ciro l'ha detto
+_frasi_chat = []        # le ultime frasi di Chat dette: il loro testo non va nel registro (impostazione)
 
 
 def _chiedi_urgenza(prompt):
@@ -757,6 +764,7 @@ def _giudica(voci):
 
 def ricevi_chat(dato, in_sottofondo=True):
     if dato.get("conversazioni") is None:   # l'elenco non e' nella pagina: solo conteggi, per capire dove sta
+        _chat.lettura_fallita(dato.get("account"))   # lettura fallita, non «zero messaggi»
         try:
             file_diagnosi = Path(modulo_cervello.CONTESTO).with_name("chat-diagnosi.json")
             vecchie = json.loads(file_diagnosi.read_text(encoding="utf-8")) if file_diagnosi.exists() else []
@@ -766,12 +774,20 @@ def ricevi_chat(dato, in_sottofondo=True):
             pass
         return
     nuove = _chat.aggiorna(dato.get("account"), dato.get("conversazioni") or [])
-    if not nuove:
-        return
+    if not nuove or not modulo_cervello.leggi_impostazioni().get("chat_al_modello", True):
+        return   # impostazione spenta: nessun messaggio al modello, restano nel pannello
     if in_sottofondo:
         threading.Thread(target=_giudica, args=(nuove,), daemon=True).start()
     else:
         _giudica(nuove)
+
+
+def testo_per_registro(testo):
+    """Una frase di Chat detta da Ciro: nel registro solo se l'impostazione lo permette."""
+    pulito = (testo or "").strip()
+    if len(pulito) >= 8 and any(pulito in frase or frase in pulito for frase in _frasi_chat):
+        return "[messaggio di Google Chat: testo non registrato]"
+    return testo
 
 
 def giro_chat(adesso=None):
@@ -799,7 +815,12 @@ def giro_chat(adesso=None):
         _promemoria_chat[voce["chat_id"]] = adesso
         _in_coda({"testo": frase, "da": "chat", "progetto": "chat", "quando": adesso})
         _cervello.annota_avviso("chat", frase, domanda=False)
-        registra("chat-avviso", testo=frase)
+        if modulo_cervello.leggi_impostazioni().get("chat_nel_registro"):
+            registra("chat-avviso", testo=frase)
+        else:
+            _frasi_chat.append(frase)
+            del _frasi_chat[:-20]
+            registra("chat-avviso", chat_id=voce["chat_id"].split("|")[0] + "|…", promemoria=ultima is not None)
 
 
 def giro_avvisi():
@@ -822,7 +843,7 @@ def giro_avvisi():
             continue  # stessa sessione appena annunciata (sessione e posta insieme)
         _ultimo_avviso[progetto] = time.time()
         frase = _frase_avviso(voce)
-        _cervello.numeri.numero(chiave_numero(voce), frase=frase)
+        _cervello.numeri.numero(chiave_numero(voce), frase=frase, detta=True)
         frase = con_numero(frase, voce.get("numero"))
         with _coda_lock:
             if len(_coda) < 10:
@@ -990,7 +1011,7 @@ def _metti_in_attesa(scheda):
         registra("domanda-in-pausa", domanda_id=scheda["id"])
         return  # resta nel pannello, la dira' il riassunto alla ripresa
     numero = _cervello.numeri.numero(scheda["id"], progetto=scheda.get("progetto"), domanda_id=scheda["id"],
-                                     frase=frase_domanda(scheda))
+                                     frase=frase_domanda(scheda), detta=True)
     frase = con_numero(frase_domanda(scheda), numero)
     _in_coda({"testo": frase, "da": "domande", "tipo": "domanda", "progetto": scheda.get("progetto"),
               "domanda_id": scheda["id"], "opzioni": modulo_cervello.opzioni_per_voce(scheda),
@@ -1418,12 +1439,12 @@ class Gestore(BaseHTTPRequestHandler):
             if percorso == "/api/parla":
                 dato = json.loads(corpo or b"{}")
                 if muto():
-                    registra("parla-zitto", testo=dato.get("testo", ""))
+                    registra("parla-zitto", testo=testo_per_registro(dato.get("testo", "")))
                     self._errore(423, "voce spenta")
                     return
                 inizio = time.time()
                 byte_wav = parla_wav(dato.get("testo", ""), dato.get("velocita"))
-                registra("parla", testo=dato.get("testo", ""),
+                registra("parla", testo=testo_per_registro(dato.get("testo", "")),
                          secondi_voce=round(time.time() - inizio, 1))
                 self._invia(200, byte_wav, "audio/wav")
             elif percorso == "/api/ascolta":
