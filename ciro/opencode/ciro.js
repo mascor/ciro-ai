@@ -58,11 +58,18 @@ export const CiroPlugin = {
           titolo = typeof dati?.title === "string" ? dati.title : ""
           cartella = typeof dati?.directory === "string" ? dati.directory : ""
         } catch {}
+        // field names differ between OpenCode versions: action/resources (2.3), permission/patterns
+        // (2.x SDK types), type/pattern (1.x)
+        const testo = (x) => typeof x === "string" ? x : (x?.pattern ?? x?.path ?? x?.value ?? JSON.stringify(x))
+        const risorse = [].concat(richiesta.resources ?? richiesta.patterns ?? richiesta.pattern ?? []).map(testo)
+        const azione = testo(richiesta.action ?? richiesta.permission ?? richiesta.type ?? "")
+        scriviLog(`richiesta ${richiesta.id}: ${azione} ${JSON.stringify(risorse).slice(0, 200)}`)
         const esito = await chiama("/hooks/opencode", {
           requestID: richiesta.id,
           sessionID: richiesta.sessionID,
-          permission: richiesta.permission,
-          patterns: richiesta.patterns,
+          permission: azione,
+          patterns: risorse,
+          what: richiesta.title,
           title: titolo,
           directory: cartella || process.cwd(),
         }, ATTESA_MS)

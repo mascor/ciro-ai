@@ -217,6 +217,20 @@ class TestOpenCode(BaseHook):
             filo.join(5)
         self.assertEqual(esiti, [{"reply": "once"}] * 3)
 
+    def test_task_delegati_e_richieste_vuote_non_chiedono(self):
+        self.assertIsNone(server.gestisci_opencode(dict(self.RICHIESTA, title="oc-p4-green3-20261119-224727"), attesa=1))
+        self.assertIsNone(server.gestisci_opencode(dict(self.RICHIESTA, permission=None, patterns=[]), attesa=1))
+        self.assertEqual(domande.elenca(), [])
+
+    def test_campi_di_opencode_1(self):
+        dato = {k: v for k, v in self.RICHIESTA.items() if k not in ("permission", "patterns")}
+        filo, esito = self.in_corso_oc(dict(dato, type="bash", pattern="git push"))
+        detti = [v["testo"] for v in self.coda()]
+        self.assertTrue(any("vuole eseguire: git push" in d.lower() for d in detti), detti)
+        self.c.chiedi("no")
+        filo.join(5)
+        self.assertEqual(esito["uscita"], {"reply": "reject"})
+
     def test_riassunti_opencode(self):
         self.assertEqual(server.riassunto_opencode("edit", ["/a/b/app.py"]), "vuole modificare il file app.py")
         self.assertEqual(server.riassunto_opencode("external_directory", ["/tmp/*"]),

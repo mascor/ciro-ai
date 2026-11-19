@@ -1215,6 +1215,7 @@ def gestisci_hook(dato, attesa=None, adesso=time.time):
 # OpenCode: il plugin ciro.js manda «permission.asked»; la domanda compare anche
 # nel terminale, e se l'utente risponde li' il plugin lo dice (/hooks/opencode/risposto).
 _richieste_opencode = {}   # requestID di OpenCode -> ID della domanda
+_lock_richieste = threading.Lock()
 
 
 def riassunto_opencode(permesso, schemi):
@@ -1233,8 +1234,16 @@ def gestisci_opencode(dato, attesa=None, adesso=time.time):
     """{"reply": "once"|"reject"} o None (l'utente risponde nel terminale di OpenCode)."""
     if not isinstance(dato, dict) or muto() or not pagina_sveglia() or not dato.get("requestID"):
         return None
+    # i task delegati (oc-task.sh li chiama «oc-…») non chiedono a voce; e mai una domanda vuota
+    if str(dato.get("title") or "").startswith("oc-"):
+        return None
     progetto = os.path.basename(str(dato.get("directory") or "").rstrip("/")) or "opencode"
-    permesso = str(dato.get("permission") or "")
+    permesso = str(dato.get("permission") or dato.get("type") or "")
+    if not dato.get("patterns") and dato.get("pattern"):
+        dato = dict(dato, patterns=dato["pattern"] if isinstance(dato["pattern"], list) else [dato["pattern"]])
+    if not permesso:
+        registra("hook-opencode-vuoto", chiavi=sorted(dato)[:20])
+        return None
     frase = riassunto_opencode(permesso, dato.get("patterns"))
 
     def risposta(scelta):
@@ -1262,19 +1271,20 @@ def _chiedi_e_aspetta(pronta, sessione, evento, attesa, adesso, richiesta=None):
     progetto, oggetto, testo, opzioni, operazione, risposta = pronta
     if in_pausa(progetto):
         return None
-    if richiesta and richiesta in _richieste_opencode:
-        # OpenCode carica il plugin in piu' processi: la stessa richiesta arriva piu' volte,
-        # la domanda resta una sola (e chi arriva dopo non la chiude)
-        identificativo, richiesta = _richieste_opencode[richiesta], None
-    else:
-        try:
-            identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione,
-                                                         sessione=sessione)
-        except Exception as errore:  # noqa: BLE001
-            registra("errore-hook", errore=repr(errore)[:300])
-            return None
-    if richiesta:
-        _richieste_opencode[richiesta] = identificativo
+    with _lock_richieste:   # controllo e registrazione insieme: le copie arrivano nello stesso istante
+        if richiesta and richiesta in _richieste_opencode:
+            # OpenCode carica il plugin in piu' processi: la stessa richiesta arriva piu' volte,
+            # la domanda resta una sola (e chi arriva dopo non la chiude)
+            identificativo, richiesta = _richieste_opencode[richiesta], None
+        else:
+            try:
+                identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione,
+                                                             sessione=sessione)
+            except Exception as errore:  # noqa: BLE001
+                registra("errore-hook", errore=repr(errore)[:300])
+                return None
+            if richiesta:
+                _richieste_opencode[richiesta] = identificativo
     registra("hook", evento=evento, domanda_id=identificativo)
     if attesa is None:   # impostabile: «attesa_hook» in impostazioni.json (secondi, al massimo 70)
         attesa = min(70, max(5, int(modulo_cervello.leggi_impostazioni().get("attesa_hook") or ATTESA_HOOK)))
