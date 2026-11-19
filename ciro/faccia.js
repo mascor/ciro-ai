@@ -200,11 +200,36 @@ function sottotitolo(chi, testo) {
   riga.classList.toggle("vuoto", !pulito);
 }
 
+// Divide in frasi: la prima parte subito, le altre si preparano mentre parla.
+// I pezzi molto corti si uniscono al seguente (la voce resta naturale).
+function dividiFrasi(testo) {
+  const pezzi = testo.split(/(?<=[.!?…])\s+/).map((p) => p.trim()).filter(Boolean);
+  const frasi = [];
+  for (const pezzo of pezzi) {
+    if (frasi.length > 1 && frasi[frasi.length - 1].length < 25) frasi[frasi.length - 1] += " " + pezzo;
+    else frasi.push(pezzo);
+  }
+  return frasi.length ? frasi : [testo];
+}
+
+function caricaVoce(testo) {
+  const promessa = fetch("/api/parla", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ testo }),
+  }).then((risposta) => {
+    if (!risposta.ok) throw new Error("voce non disponibile");
+    return risposta.arrayBuffer();
+  }).then((byte) => ctxUscita.decodeAudioData(byte));
+  promessa.catch(() => {}); // se viene scartata (interruzione) non e' un errore
+  return promessa;
+}
+
 function di(testo) {
   const pulito = (testo || "").trim();
   if (pulito && (sveglia || muto)) sottotitolo("ciro", pulito); // anche se zitto: la leggi
   if (!pulito || !sveglia || muto) return; // spento o zitto: resta solo nella chat
-  coda.push(pulito);
+  for (const frase of dividiFrasi(pulito)) coda.push({ testo: frase, audio: null });
   if (!inCorso) prossimo();
 }
 
@@ -215,16 +240,11 @@ async function prossimo() {
     return;
   }
   inCorso = true;
-  const testo = coda.shift();
+  const voce = coda.shift();
+  if (!voce.audio) voce.audio = caricaVoce(voce.testo);
+  if (coda.length && !coda[0].audio) coda[0].audio = caricaVoce(coda[0].testo); // la prossima, intanto
   try {
-    const risposta = await fetch("/api/parla", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ testo }),
-    });
-    if (!risposta.ok) throw new Error("voce non disponibile");
-    const byte = await risposta.arrayBuffer();
-    const audio = await ctxUscita.decodeAudioData(byte);
+    const audio = await voce.audio;
     await riproduci(audio);
   } catch (errore) {
     console.warn(errore);
@@ -354,6 +374,8 @@ let ultimoSuono = 0;
 let inizioDiscorso = 0;
 let rumore = 0.004;
 let attesaInvio = false;
+let filaForte = 0;        // fotogrammi di fila sopra la soglia (128 ms l'uno)
+let voceVera = false;     // nel discorso c'e' un suono continuo, non solo clic
 const PRE_ROLL = [];      // 350 ms prima che si capisca che stai parlando
 
 async function accendiMicrofono() {
@@ -415,19 +437,31 @@ function esaminaMicrofono(dati) {
     inizioDiscorso = adesso;
     bufferIngresso = PRE_ROLL.slice();
     ultimoSuono = adesso;
+    filaForte = 0;
+    voceVera = false;
     segnalaAttivita();
   }
 
   if (parlando) {
     bufferIngresso.push(new Float32Array(dati));
-    if (rms > soglia) ultimoSuono = adesso;
-    const troppoLungo = adesso - inizioDiscorso > 45000;
+    // la voce dura almeno 2 fotogrammi di fila (~0,25 s); un clic della
+    // tastiera no: i clic non tengono aperto l'ascolto
+    filaForte = rms > soglia ? filaForte + 1 : 0;
+    if (filaForte >= 2) {
+      ultimoSuono = adesso;
+      voceVera = true;
+    }
+    const troppoLungo = adesso - inizioDiscorso > 30000;
     if (adesso - ultimoSuono > 900 || troppoLungo) {
       parlando = false;
-      attesaInvio = true;
       const pezzi = bufferIngresso;
       bufferIngresso = [];
       PRE_ROLL.length = 0;
+      if (!voceVera) {
+        evento("rumore-ignorato", "solo clic o colpi brevi");
+        return;
+      }
+      attesaInvio = true;
       inviaDiscorso(pezzi).finally(() => {
         attesaInvio = false;
       });
