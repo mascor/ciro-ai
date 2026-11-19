@@ -817,7 +817,7 @@ button {
   bottom: 6.5vh;
   left: calc(50% + (var(--fascia) - var(--destra)) / 2);
   transform: translateX(-50%);
-  width: min(62vw, 900px);
+  width: min(62vw, 900px, calc(100vw - var(--fascia) - var(--destra) - 48px));   /* resta nella colonna centrale */
   display: flex;
   flex-direction: column;
   gap: 8px;
