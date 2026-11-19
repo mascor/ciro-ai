@@ -809,12 +809,15 @@ function disegnaAttese(elenco) {
   }
   for (const attesa of elenco) {
     const riga = document.createElement("li");
-    riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : "posta");
-    riga.title = T("Clicca per rispondere a %s", attesa.progetto);
+    const diChat = attesa.tipo === "chat";
+    riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : diChat ? "chat" : "posta") +
+      (diChat && attesa.urgente ? " urgente" : "");
+    riga.title = diChat ? (attesa.motivo || attesa.testo || "") : T("Clicca per rispondere a %s", attesa.progetto);
     const testa = document.createElement("div");
     testa.className = "attesa-testa";
     const progetto = document.createElement("b");
-    progetto.textContent = attesa.progetto || "?";
+    // un messaggio di Google Chat: chi scrive al posto del progetto
+    progetto.textContent = diChat ? (attesa.mittente || "?") : (attesa.progetto || "?");
     if (attesa.numero) {
       // il numero della domanda: a voce «tre, sì» invece del nome del progetto
       const numero = document.createElement("span");
@@ -823,7 +826,8 @@ function disegnaAttese(elenco) {
       progetto.prepend(numero);
     }
     const quando = document.createElement("span");
-    quando.textContent = `${T(attesa.tipo)} · ${testoAttesa(attesa.secondi)}`;
+    const dove = diChat ? "Chat " + String(attesa.account || "").split("@").pop() : T(attesa.tipo);
+    quando.textContent = `${dove} · ${testoAttesa(attesa.secondi)}`;
     testa.append(progetto, quando);
     const testo = document.createElement("p");
     testo.textContent = attesa.testo;
@@ -849,7 +853,7 @@ function disegnaAttese(elenco) {
       riga.appendChild(pulsanti);
     }
     // clic: apre la chat pronta per rispondere a quella sessione tramite Ciro
-    riga.addEventListener("click", () => {
+    if (!diChat) riga.addEventListener("click", () => {
       chat.classList.add("aperta");
       chatTesto.value = T("Di' a %s: ", attesa.progetto);
       chatTesto.focus();
@@ -987,6 +991,22 @@ pulsanteLingua.addEventListener("click", async () => {
   aggiornaQuadro();
 });
 
+// Pannello sinistro in una schermata, senza scorrere: prima rimpicciolisco i
+// consumi (fino al 55%), poi anche «Ti aspettano» (fino al 70%).
+const pannelloSinistro = document.getElementById("pannello");
+function adattaPannello() {
+  const consumi = document.getElementById("pannello-consumi");
+  const attese = document.getElementById("pannello-attese");
+  consumi.style.zoom = "";
+  attese.style.zoom = "";
+  // «Ti aspettano» prende lo spazio che resta e taglia cio' che non ci sta
+  const entra = () => pannelloSinistro.scrollHeight <= pannelloSinistro.clientHeight + 1 &&
+    attese.scrollHeight <= attese.clientHeight + 1;
+  for (let z = 1; z >= 0.55 && !entra(); z -= 0.05) consumi.style.zoom = z.toFixed(2);
+  for (let z = 1; z >= 0.7 && !entra(); z -= 0.05) attese.style.zoom = z.toFixed(2);
+}
+window.addEventListener("resize", adattaPannello);
+
 function disegnaQuadro(dati) {
   disegnaLingua(dati.lingua);
   disegnaPausa(dati.pausa);
@@ -1000,6 +1020,7 @@ function disegnaQuadro(dati) {
   disegnaConsumi(dati.consumi || []);
   disegnaAttese(dati.attese || []);
   disegnaSessioni(dati.sessioni || []);
+  adattaPannello();
   // dopo un ricaricamento: una credenziale ancora chiesta riapre il campo
   const credenziale = (dati.attese || []).find((a) => a.operazione === "credenziali" && a.domanda_id);
   if (credenziale) mostraCredenziale(credenziale);

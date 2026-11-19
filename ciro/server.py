@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cervello as modulo_cervello
 from testi import lingua, t  # noqa: E402
+import chat as modulo_chat
 import numeri as numeri_parlati
 import testi as modulo_testi  # noqa: E402
 
@@ -61,6 +62,7 @@ NOMI_UTENTE_RE = "|".join(re.escape(n) for n in NOMI_UTENTE)
 _coda = []            # messaggi da far dire alla faccia
 _coda_lock = threading.Lock()
 _cervello = modulo_cervello.Cervello()
+_cervello.chiudi_chat = lambda chiave: _chat.chiudi(chiave)
 _cervello_lock = threading.Lock()
 _kokoro = None
 _kokoro_lock = threading.Lock()
@@ -289,7 +291,8 @@ def pulisci_trascrizione(testo):
 
 # un verso da solo (respiro, esitazione, rumore) non e' una frase: whisper lo scrive
 # come «e» e il modello rifaceva l'ultima domanda a ogni respiro (19/11)
-VERSI = {"e", "eh", "ehm", "em", "uhm", "um", "uh", "mm", "mmh", "mmm", "hm", "hmm", "ehh"}
+# anche i sospiri e gli sbuffi («Pfff», «uff»: 19/11); «ah» resta: e' la lettera A
+VERSO_RE = re.compile(r"^(?:e+h*|e+h*m+|u+h+|u+h*m+|m+h*|h+m+|p+f+|u+f+|f+|o+h+|s+h+|p+s+t*)$")
 
 
 # dopo un'interruzione «Ciro, fermati» vuol dire solo: stai zitto (whisper a volte
@@ -303,7 +306,7 @@ def solo_stop(testo):
 
 
 def solo_verso(testo):
-    return re.sub(r"[^a-z]", "", (testo or "").lower()) in VERSI
+    return bool(VERSO_RE.match(re.sub(r"[^a-z]", "", (testo or "").lower())))
 
 
 def trascrivi(byte_audio):
@@ -632,12 +635,22 @@ def attese(sessioni=None):
                        "testo": (messaggio.get("oggetto") or "")[:280], "secondi": secondi,
                        # il corpo porta la domanda completa con le opzioni A/B/C
                        "dettaglio": modulo_cervello._inizio_testo(messaggio)[:3000]})
-    elenco.sort(key=lambda v: -v["secondi"])  # prima chi aspetta da piu' tempo
+    for voce in _chat.aperte(adesso_s):
+        elenco.append({"progetto": "chat", "tipo": "chat", "chat_id": voce["chiave"],
+                       "account": voce.get("account"), "mittente": voce.get("nome"),
+                       "diretto": voce.get("diretto"), "urgente": voce.get("urgente"),
+                       "risposta": voce.get("risposta"), "motivo": voce.get("motivo"),
+                       "testo": (voce.get("testo") or "")[:280], "a_voce": False,
+                       "secondi": int(adesso_s - voce.get("visto", adesso_s))})
+    # prima chi aspetta da piu' tempo; i messaggi di Chat non urgenti in fondo
+    elenco.sort(key=lambda v: (v.get("tipo") == "chat" and not v.get("urgente"), -v["secondi"]))
     numera(elenco)
     return elenco[:10]
 
 
 def chiave_numero(voce):
+    if voce.get("chat_id"):
+        return "chat|" + voce["chat_id"]   # stesso numero finche' la conversazione resta aperta
     return voce.get("domanda_id") or _chiave(voce)
 
 
@@ -652,11 +665,11 @@ def numera(elenco):
     numeri.allinea({chiave_numero(v) for v in elenco})
 
 
-def con_numero(frase, numero):
-    """«Da alpha: ...» -> «Domanda tre, da alpha: ...»."""
+def con_numero(frase, numero, parola="Domanda %s, "):
+    """«Da alpha: ...» -> «Domanda tre, da alpha: ...» (o «Messaggio tre, ...»)."""
     if not numero:
         return frase
-    return t("Domanda %s, ") % numeri_parlati.parola(numero, lingua()) + frase[:1].lower() + frase[1:]
+    return t(parola) % numeri_parlati.parola(numero, lingua()) + frase[:1].lower() + frase[1:]
 
 
 # ----------------------------------------------- avvisi spontanei di Ciro
@@ -697,6 +710,65 @@ def _frase_avviso(voce):
     return t("Da %s, serve una %s: %s. Come rispondo?") % (progetto, t(voce.get("tipo") or ""), testo)
 
 
+# -------------------------------------------------------------- Google Chat
+# L'estensione «Ciro Agente» manda i non letti di ogni profilo; solo i messaggi
+# diretti vanno al modello per l'urgenza. Ciro dice quelli urgenti che aspettano
+# una risposta e li ricorda ogni 15 minuti finche' restano non letti.
+# accanto al contesto di Ciro (~/.config/faccia): un Ciro di prova ha il suo
+_chat = modulo_chat.Chat(lambda: Path(modulo_cervello.CONTESTO).with_name("chat.json"))
+_promemoria_chat = {}   # chiave -> ultima volta che Ciro l'ha detto
+
+
+def _chiedi_urgenza(prompt):
+    uscita, _, codice = modulo_cervello.chiedi_modello(prompt, 8)
+    return uscita if codice == 0 else ""
+
+
+def _giudica(voci):
+    for voce in voci:
+        if voce.get("diretto"):
+            _chat.imposta_urgenza(voce["chiave"], modulo_chat.valuta_urgenza(
+                voce, _chiedi_urgenza, inglese=lingua() == "en"))
+
+
+def ricevi_chat(dato, in_sottofondo=True):
+    nuove = _chat.aggiorna(dato.get("account"), dato.get("conversazioni") or [])
+    if not nuove:
+        return
+    if in_sottofondo:
+        threading.Thread(target=_giudica, args=(nuove,), daemon=True).start()
+    else:
+        _giudica(nuove)
+
+
+def giro_chat(adesso=None):
+    """Dice i messaggi urgenti che aspettano una risposta; li ricorda ogni 15 minuti."""
+    adesso = time.time() if adesso is None else adesso
+    voci = [v for v in attese() if v.get("tipo") == "chat"]
+    aperte = {v["chat_id"] for v in voci}
+    for chiave in [k for k in _promemoria_chat if k not in aperte]:
+        del _promemoria_chat[chiave]
+    if in_pausa("chat"):
+        return
+    for voce in voci:
+        if not (voce.get("urgente") and voce.get("risposta")):
+            continue
+        ultima = _promemoria_chat.get(voce["chat_id"])
+        if ultima is not None and adesso - ultima < modulo_chat.PROMEMORIA:
+            continue
+        testo = _testo_parlabile(voce.get("testo"))[:300]
+        numero = numeri_parlati.parola(voce.get("numero") or 0, lingua())
+        if ultima is None:
+            frase = con_numero(t("Da %s: %s. Come rispondo?") % (voce.get("mittente") or "?", testo),
+                               voce.get("numero"), "Messaggio %s, ")
+        else:
+            frase = t("Ti ricordo il messaggio %s, da %s: %s.") % (numero, voce.get("mittente") or "?", testo)
+        _promemoria_chat[voce["chat_id"]] = adesso
+        _in_coda({"testo": frase, "da": "chat", "progetto": "chat", "quando": adesso})
+        _cervello.annota_avviso("chat", frase, domanda=False)
+        registra("chat-avviso", testo=frase)
+
+
 def giro_avvisi():
     """Un giro: dice le domande nuove delle sessioni e della posta."""
     global _visti
@@ -727,6 +799,7 @@ def giro_avvisi():
                                 domanda=voce.get("tipo") in ("domanda", "decisione"))
         registra("avviso", testo=frase)
     _visti = set(chiavi)
+    giro_chat()
 
 
 def sorveglia_attese():
@@ -1249,7 +1322,7 @@ class Gestore(BaseHTTPRequestHandler):
             return False
         origine = self.headers.get("Origin")
         if origine and origine.startswith("chrome-extension://"):
-            return percorso == "/api/consumi"
+            return percorso == "/api/consumi" or percorso.startswith("/api/chat/")
         if origine and urlparse(origine).hostname not in ("127.0.0.1", "localhost"):
             return False
         sito = self.headers.get("Sec-Fetch-Site")
@@ -1383,6 +1456,9 @@ class Gestore(BaseHTTPRequestHandler):
                     else:
                         esito = {"risposta": "", "fase": _collaudo.fase}
                 self._invia(200, json.dumps(esito, ensure_ascii=False))
+            elif percorso == "/api/chat/non-letti":
+                ricevi_chat(json.loads(corpo or b"{}"))
+                self._invia(200, json.dumps({"ok": True}))
             elif percorso == "/api/lingua":
                 dato = json.loads(corpo or b"{}")
                 if dato.get("lingua") in modulo_testi.LINGUE:

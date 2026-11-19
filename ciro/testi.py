@@ -138,6 +138,10 @@ EN = {
         "During the pause %d questions arrived: from %s. They are on the left.",
     "Salvata nel Portachiavi come %s. Mandato.": "Saved in the Keychain as %s. Sent.",
     " e ": " and ",
+    # Google Chat
+    "Messaggio %s, ": "Message %s, ",
+    "Ti ricordo il messaggio %s, da %s: %s.": "Reminder: message %s, from %s: %s.",
+    "Va bene.": "OK.",
     # numbered questions
     "Domanda %s, ": "Question %s, ",
     "Quale domanda? %s.": "Which question? %s.",

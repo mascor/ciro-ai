@@ -1,6 +1,6 @@
 # Google Chat in Ciro
 
-Date: 19/11/2026. Status: approved in principle (approach B, urgency by the model); waiting for the final approval.
+Date: 19/11/2026. Status: approved (approach B, urgency by the model). Reading and reminders built; answering by voice next.
 
 ## Why
 
@@ -44,13 +44,13 @@ The user chose B.
 
 ## Design
 
-**Reading: the notifications of Chat.** On `chat.google.com` (and Chat inside Gmail), a
-small script in the page catches the desktop notifications that Chat shows: each one
-has the sender, the space and the text, and they cover direct messages, mentions and the
-spaces the user follows. This avoids reading the page layout, which changes often.
-*To verify first (1-hour spike):* that Chat raises these notifications from the page
-while its tab is open. Fallback: read the unread list in the sidebar (sender, space, first
-line).
+**Reading: the unread list of the Chat page** (decided after the spike of 19/11/2026).
+The spike showed that the Chat page marks every conversation in its list with an id
+(`dm/…` for a direct message, `space/…` for a space) and an unread flag. Every 20 seconds
+the extension sends the full unread list of its profile: a conversation that is no longer
+there was read in Chat and leaves Ciro too. This works without Chat notifications and also
+shows the messages that arrived before. Notifications are not used for now; mentions inside
+spaces are therefore not detected yet (spaces stay on the panel).
 
 - Chat must be open in a tab in each profile (a pinned tab). The extension shows a warning
   on Ciro's panel when a profile has no Chat tab.

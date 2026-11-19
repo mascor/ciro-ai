@@ -129,7 +129,7 @@ The repository has three parts:
 - **`stato/scripts/claude_stato.py`** — reads the local files Claude Code already writes
   (`~/.claude/sessions`, `~/.claude/projects`) to know which sessions are open, working or
   waiting. No tokens, no network.
-- **`ciro/estensione-chrome/`** — optional Chrome extension that reads your usage on claude.ai,
+- **`ciro/estensione-chrome/`** — "Ciro Agente", the optional Chrome extension: Ciro's eyes in the browser. It reads your usage on claude.ai,
   OpenCode Go and DeepSeek from the pages where you are already logged in.
 - **`ciro/barra-stato.py`** — optional Claude Code status line that saves the official usage
   limits for the left panel.

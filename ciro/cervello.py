@@ -611,6 +611,7 @@ class Cervello:
         self.conferma_lettera = None   # (scheda, lettera, sentito): «Hai detto tre?» su una risposta incerta
         self.sentito_per_risposta = {}  # ID -> cosa aveva capito whisper (per imparare dalle correzioni)
         self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
+        self.chiudi_chat = None       # il server collega la chiusura di un messaggio di Chat
         # numeri delle domande aperte («domanda tre»): accanto al contesto, sopravvivono ai riavvii
         self.numeri = modulo_numeri.Numeri(lambda: Path(CONTESTO).with_name("numeri-domande.json"))
         # cosa ha detto Ciro per ultimo: le risposte brevi («sì», «A», «rispondi B»)
@@ -932,6 +933,14 @@ class Cervello:
     def _risposta_per_numero(self, testo, detto):
         """La domanda indicata con il suo numero. None se il testo non lo fa."""
         parole = detto.split()
+        # «letto il tre», «ok il tre»: un messaggio di Chat esce dal pannello
+        if len(parole) >= 2 and parole[0] in ("letto", "letta", "visto", "ok", "read", "seen"):
+            resto = [p for p in parole[1:] if p not in ("il", "la", "lo", "messaggio", "the", "message")]
+            numero = modulo_numeri.DETTI.get(resto[0]) if len(resto) == 1 else None
+            voce = self.numeri.cerca(numero) if numero else None
+            if voce and str(voce.get("chiave", "")).startswith("chat|") and self.chiudi_chat:
+                self.chiudi_chat(voce["chiave"][len("chat|"):])
+                return self._detto(testo, t("Va bene."), False)
         esplicita = False
         while parole and parole[0] in PRIMA_DEL_NUMERO:
             esplicita = esplicita or parole[0] in ("domanda", "numero", "question", "number")

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Ciro Assistente AI - consumi",
-  "version": "1.2",
-  "description": "Legge i consumi di Claude, OpenCode Go e DeepSeek dalle pagine in cui sei gia' collegato e li manda a Ciro sul Mac (127.0.0.1).",
+  "name": "Ciro Agente",
+  "version": "1.4",
+  "description": "Gli occhi di Ciro nel browser: legge i consumi di Claude, OpenCode Go e DeepSeek e i messaggi non letti di Google Chat dalle pagine in cui sei gia' collegato, e li manda a Ciro sul Mac (127.0.0.1).",
   "permissions": [
     "alarms",
     "storage"
@@ -11,7 +11,8 @@
     "https://claude.ai/*",
     "https://opencode.ai/*",
     "https://platform.deepseek.com/*",
-    "http://127.0.0.1:8765/*"
+    "http://127.0.0.1:8765/*",
+    "https://chat.google.com/*"
   ],
   "background": {
     "service_worker": "sfondo.js"
@@ -37,6 +38,16 @@
         "leggi-pagina.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chat.google.com/*"
+      ],
+      "js": [
+        "chat.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ]
 }

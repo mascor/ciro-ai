@@ -1,4 +1,4 @@
-// Faccia - consumi: ogni 5 minuti legge i limiti d'uso degli account claude.ai
+// Ciro Agente: ogni 5 minuti legge i limiti d'uso degli account claude.ai
 // del profilo e li manda a Ciro sul Mac. Riceve anche i dati letti dalle
 // schede aperte (claude.ai, OpenCode Go, DeepSeek).
 // Usa solo l'accesso gia' attivo nel browser: non salva password ne' cookie.
@@ -60,6 +60,18 @@ function giro() {
   );
   leggiPagineDaSolo().catch((errore) => console.warn("pagine dei consumi", errore));
 }
+
+// Google Chat: i non letti di ogni scheda di Chat vanno a Ciro
+const CIRO_CHAT = { "chat-non-letti": "http://127.0.0.1:8765/api/chat/non-letti" };
+chrome.runtime.onMessage.addListener((messaggio) => {
+  const indirizzo = messaggio && CIRO_CHAT[messaggio.tipo];
+  if (!indirizzo || !messaggio.dato) return;
+  fetch(indirizzo, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(messaggio.dato),
+  }).catch((errore) => console.warn("Ciro non raggiungibile (chat)", errore));
+});
 
 chrome.runtime.onMessage.addListener((messaggio) => {
   if (!messaggio || messaggio.tipo !== "consumo" || !messaggio.dato) return;

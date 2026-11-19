@@ -10,7 +10,8 @@ from tests.test_coordinamento_ciro import server
 
 class TestVersi(unittest.TestCase):
     def test_versi_da_soli_scartati(self):
-        for testo in ("e", "E.", "eh", "Ehm...", "mm", "Mmh.", "uhm", "hmm", " e ", "uh", "um"):
+        for testo in ("e", "E.", "eh", "Ehm...", "mm", "Mmh.", "uhm", "hmm", " e ", "uh", "um",
+                      "Pfff", "pff", "uff", "Ufff.", "oh", "shh", "psst"):
             self.assertTrue(server.solo_verso(testo), testo)
 
     def test_risposte_vere_restano(self):
