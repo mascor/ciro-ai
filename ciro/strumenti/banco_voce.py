@@ -50,10 +50,36 @@ def trascrivi(modello, file):
     return time.time() - inizio, " ".join(esito.stdout.split())
 
 
+def banco_ciro():
+    """The same transcription Ciro uses (server.trascrivi), on every recording."""
+    import os
+    import tempfile
+    os.environ.setdefault("FACCIA_CONTESTO", str(Path(tempfile.mkdtemp()) / "contesto.json"))
+    import cervello
+    import server
+    alias = dict(cervello.LETTERE_SENTITE)
+    alias.update(cervello.leggi_impostazioni().get("alias_lettere") or {})
+    etichette = json.loads((AUDIO / "etichette.json").read_text(encoding="utf-8"))
+    tempi, giuste = [], 0
+    for file, attesa in sorted(etichette.items()):
+        inizio = time.time()
+        sentita = server.trascrivi((AUDIO / file).read_bytes())
+        tempi.append(time.time() - inizio)
+        ok = corrisponde(attesa, sentita, alias)
+        giuste += ok
+        print("    %-3s %-16s -> %-20r %.2f s" % ("OK" if ok else "NO", attesa, sentita, tempi[-1]))
+    print("CIRO %d/%d capite, %.2f s a frase (mediana)" % (giuste, len(tempi), statistics.median(tempi)))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--modelli", nargs="*", default=list(CANDIDATI))
+    parser.add_argument("--ciro", action="store_true",
+                        help="only the real chain of Ciro (short audio: base, long: turbo)")
     args = parser.parse_args(argv)
+    if args.ciro:
+        return banco_ciro()
     import cervello
     alias = dict(cervello.LETTERE_SENTITE)
     alias.update(cervello.leggi_impostazioni().get("alias_lettere") or {})

@@ -176,7 +176,13 @@ mkdir -p ~/.local/share/whisper-cpp && cd ~/.local/share/whisper-cpp
 curl -LO https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
 # voice activity detection: noise and silence are never transcribed (no invented phrases)
 curl -LO https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin
+# fast model for short answers (A, sì, no...): about 0.3 s instead of 1.5 s
+curl -LO https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
 ```
+
+Short audio (up to 3.5 s) goes to the fast model, longer phrases to large-v3-turbo.
+`python3 ciro/strumenti/banco_voce.py` compares models on the phrases recorded during your
+calibrations (`--ciro` runs Ciro's own chain).
 
 ### 5. Mailbox
 

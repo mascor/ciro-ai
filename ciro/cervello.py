@@ -324,7 +324,8 @@ LETTERA_RE = re.compile(r"^(?:(?:la|risposta|rispondi|rispondo|scelgo|opzione|le
                         r"vai con|metti|e|è)\s+)*([a-z])"
                         r"(?:\s+(?:per|a|ad|al|alla)\s+(.+?))?(?:\s+grazie)?$")
 # come whisper scrive a volte una lettera detta da sola
-LETTERE_SENTITE = {"ah": "a", "ha": "a", "à": "a", "bi": "b", "be": "b", "bè": "b", "ci": "c"}
+LETTERE_SENTITE = {"ah": "a", "ahh": "a", "aah": "a", "ha": "a", "à": "a",
+                   "bi": "b", "be": "b", "bè": "b", "ci": "c"}
 CORREZIONE_RE = re.compile(r"^(?:rispondi|cambia(?:\s+in)?|correggi(?:\s+in)?)\s+(?:la\s+)?([a-z])$")
 CORREZIONE_SECONDI = 120
 OPZIONI_DEPLOY_PROVA = {"A": "autorizza questa volta",

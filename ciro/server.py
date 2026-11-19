@@ -152,6 +152,30 @@ def parla_wav(testo, velocita=None):
     return byte_wav
 
 
+# Due modelli (misurati sulla voce vera il 19/11): per l'audio breve (risposte,
+# lettere, sì/no) il modello base capisce come il turbo ed e' 7 volte piu' veloce
+# (0,2 s invece di 1,5 s); per le frasi lunghe e libere resta il turbo.
+MODELLO_RAPIDO = Path(os.environ.get("CIRO_MODELLO_RAPIDO") or
+                      Path.home() / ".local/share/whisper-cpp/ggml-base-q5_1.bin")
+AUDIO_BREVE = float(os.environ.get("CIRO_AUDIO_BREVE") or 3.5)   # secondi (un «sì» registrato dura ~3,1 s)
+
+
+def passate_whisper(durata, rapido_esiste=None):
+    """Le passate da provare in ordine: (modello, con VAD). Per l'audio breve,
+    se il VAD scarta tutto (una «A» cortissima), una seconda passata senza VAD."""
+    if rapido_esiste is None:
+        rapido_esiste = MODELLO_RAPIDO.is_file()
+    if durata <= AUDIO_BREVE and rapido_esiste:
+        return [("rapido", True), ("rapido", False)]
+    return [("preciso", True)]
+
+
+def pulisci_trascrizione(testo):
+    testo = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", testo or "")   # [Musica], (risate)
+    testo = testo.replace("*", " ")                                 # *Ahh*
+    return " ".join(testo.split())
+
+
 def trascrivi(byte_audio):
     """Trascrive un WAV (qualsiasi frequenza) in italiano con whisper.cpp."""
     if not MODELLO_WHISPER.exists():
@@ -163,18 +187,22 @@ def trascrivi(byte_audio):
         subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(grezzo),
                         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(pronto)],
                        check=True, timeout=60)
-        # tarato sulla voce vera (19/11): con i valori predefiniti una «A» detta da
-        # sola (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
-        vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
-               if MODELLO_VAD.is_file() else [])
-        esito = subprocess.run([WHISPER, "-m", str(MODELLO_WHISPER), "-l", LINGUA,
-                                "-nt", "-np", *vad, "-f", str(pronto)],
-                               capture_output=True, text=True, timeout=180)
-        testo = " ".join(esito.stdout.split())
-        if esito.returncode != 0:
-            raise RuntimeError("whisper: " + " ".join(esito.stderr.split())[-400:])
-        testo = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", testo)
-        testo = " ".join(testo.split())
+        durata = max(0, pronto.stat().st_size - 44) / 32000.0
+        testo = ""
+        for modello, con_vad in passate_whisper(durata):
+            # VAD tarato sulla voce vera: con i valori predefiniti una «A» detta da sola
+            # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
+            vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
+                   if con_vad and MODELLO_VAD.is_file() else [])
+            percorso = MODELLO_RAPIDO if modello == "rapido" else MODELLO_WHISPER
+            esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", LINGUA,
+                                    "-nt", "-np", *vad, "-f", str(pronto)],
+                                   capture_output=True, text=True, timeout=180)
+            if esito.returncode != 0:
+                raise RuntimeError("whisper: " + " ".join(esito.stderr.split())[-400:])
+            testo = pulisci_trascrizione(esito.stdout)
+            if testo:
+                break
         # whisper "sente" queste frasi nel rumore; un "grazie" da solo non chiede
         # comunque nulla a Ciro, quindi si scarta anche quello
         if any(frase in testo.lower() for frase in ALLUCINAZIONI) or \
@@ -1118,7 +1146,17 @@ class Gestore(BaseHTTPRequestHandler):
                 if _collaudo.fase == "frasi":   # le frasi della calibrazione restano sul Mac, per misure
                     cartella = CONFIG_FACCIA / "collaudi" / "audio"
                     cartella.mkdir(parents=True, exist_ok=True)
-                    (cartella / ("frase-%s.wav" % time.strftime("%Y%m%d-%H%M%S"))).write_bytes(corpo)
+                    nome = "frase-%s.wav" % time.strftime("%Y%m%d-%H%M%S")
+                    (cartella / nome).write_bytes(corpo)
+                    try:   # l'etichetta (la frase che doveva dire) per il banco di prova
+                        etichette_file = cartella / "etichette.json"
+                        etichette = json.loads(etichette_file.read_text(encoding="utf-8")) \
+                            if etichette_file.is_file() else {}
+                        etichette[nome] = modulo_collaudo.FRASI[_collaudo.indice]
+                        etichette_file.write_text(json.dumps(etichette, ensure_ascii=False, indent=1),
+                                                  encoding="utf-8")
+                    except (OSError, ValueError, IndexError):
+                        pass
                 inizio = time.time()
                 testo = trascrivi(corpo)
                 registra("ascolto", testo=testo, audio_kb=len(corpo) // 1024,
