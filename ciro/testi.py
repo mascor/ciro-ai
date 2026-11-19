@@ -162,6 +162,7 @@ EN = {
     "vuole consultare il web: %s": "wants to look on the web: %s",
     "vuole usare %s di %s": "wants to use %s from %s",
     "vuole usare %s": "wants to use %s",
+    "vuole il permesso %s: %s": "asks for the %s permission: %s",
     "Permesso: %s": "Permission: %s",
     "Consento?": "Shall I allow it?",
     "consenti": "allow",

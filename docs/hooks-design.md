@@ -86,3 +86,12 @@ OpenCode 2.3.2: plugin event `permission.asked`, reply through `POST /permission
   empty after the time-out with the record `annullata`; AskUserQuestion answers carry
   `updatedInput.answers`;
 - collega.py: connect/disconnect keep the other settings, are idempotent, make a backup.
+
+## Phase 2: OpenCode (19/11/2026)
+
+`ciro/opencode/ciro.js`, installed with `collega.py connect-opencode` into
+`~/.config/opencode/plugins/`. On `permission.asked` it POSTs to `/hooks/opencode`
+(requestID, permission, patterns, session title and directory); Ciro asks by voice and
+answers `{"reply": "once"|"reject"}`, which the plugin sends with `permission.reply`.
+The prompt also stays in the OpenCode terminal: on `permission.replied` the plugin calls
+`/hooks/opencode/risposto` and Ciro closes its question. Skipped in `opencode run`.

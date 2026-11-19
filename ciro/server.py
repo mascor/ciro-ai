@@ -1196,38 +1196,97 @@ def _domanda_da_hook(dato):
 
 
 def gestisci_hook(dato, attesa=None, adesso=time.time):
-    """L'uscita per l'hook (dict) o None: «chiedi nel terminale come sempre»."""
+    """Claude Code: l'uscita per l'hook (dict) o None: «chiedi nel terminale come sempre»."""
     if not isinstance(dato, dict) or muto() or not pagina_sveglia():
         return None
     pronta = _domanda_da_hook(dato)
     if pronta is None:
         return None
+    return _chiedi_e_aspetta(pronta, titolo_sessione(dato.get("transcript_path")),
+                             dato.get("hook_event_name"), attesa, adesso)
+
+
+# OpenCode: il plugin ciro.js manda «permission.asked»; la domanda compare anche
+# nel terminale, e se l'utente risponde li' il plugin lo dice (/hooks/opencode/risposto).
+_richieste_opencode = {}   # requestID di OpenCode -> ID della domanda
+
+
+def riassunto_opencode(permesso, schemi):
+    schemi = [str(s) for s in (schemi or []) if s]
+    primo = schemi[0] if schemi else ""
+    if permesso == "bash":
+        return t("vuole eseguire: %s") % _corto(primo or "?", 100)
+    if permesso in ("edit", "write", "patch"):
+        return t("vuole modificare il file %s") % os.path.basename(primo.rstrip("/") or "?")
+    if permesso == "webfetch":
+        return t("vuole consultare il web: %s") % (urlparse(primo).hostname or _corto(primo, 60))
+    return t("vuole il permesso %s: %s") % (permesso or "?", _corto(", ".join(schemi), 80) or "?")
+
+
+def gestisci_opencode(dato, attesa=None, adesso=time.time):
+    """{"reply": "once"|"reject"} o None (l'utente risponde nel terminale di OpenCode)."""
+    if not isinstance(dato, dict) or muto() or not pagina_sveglia() or not dato.get("requestID"):
+        return None
+    progetto = os.path.basename(str(dato.get("directory") or "").rstrip("/")) or "opencode"
+    permesso = str(dato.get("permission") or "")
+    frase = riassunto_opencode(permesso, dato.get("patterns"))
+
+    def risposta(scelta):
+        return {"reply": "once" if scelta == "S" else "reject"}
+    pronta = (progetto, t("Permesso: %s") % (permesso or "?"), frase[:1].upper() + frase[1:] + ". " + t("Consento?"),
+              {"S": t("consenti"), "N": t("nega")}, "permesso", risposta)
+    return _chiedi_e_aspetta(pronta, _corto(dato.get("title"), 60), "opencode " + permesso, attesa, adesso,
+                             richiesta=str(dato["requestID"]))
+
+
+def opencode_risposto(dato):
+    """L'utente ha risposto nel terminale di OpenCode: la domanda di Ciro si chiude."""
+    identificativo = _richieste_opencode.pop(str((dato or {}).get("requestID") or ""), None)
+    if not identificativo:
+        return False
+    try:
+        domande.passa(identificativo, "annullata", "ciro", "risposto nel terminale",
+                      solo_da=("ricevuta", "in-valutazione", "in-attesa"))
+        return True
+    except (domande.PassaggioNonAmmesso, domande.SchedaNonTrovata):
+        return False
+
+
+def _chiedi_e_aspetta(pronta, sessione, evento, attesa, adesso, richiesta=None):
     progetto, oggetto, testo, opzioni, operazione, risposta = pronta
     if in_pausa(progetto):
         return None
     try:
         identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione,
-                                                     sessione=titolo_sessione(dato.get("transcript_path")))
+                                                     sessione=sessione)
     except Exception as errore:  # noqa: BLE001
         registra("errore-hook", errore=repr(errore)[:300])
         return None
-    registra("hook", evento=dato.get("hook_event_name"), domanda_id=identificativo)
+    if richiesta:
+        _richieste_opencode[richiesta] = identificativo
+    registra("hook", evento=evento, domanda_id=identificativo)
     if attesa is None:   # impostabile: «attesa_hook» in impostazioni.json (secondi, al massimo 70)
         attesa = min(70, max(5, int(modulo_cervello.leggi_impostazioni().get("attesa_hook") or ATTESA_HOOK)))
     fine = adesso() + attesa
-    while True:
-        scheda = domande.leggi(identificativo)
-        if scheda.get("stato") == "risposta-consegnata":
-            break
-        if adesso() >= fine:
-            try:
-                domande.passa(identificativo, "annullata", "ciro", "passata al terminale",
-                              solo_da=("ricevuta", "in-valutazione", "in-attesa"))
-                registra("hook-scaduto", domanda_id=identificativo)
-                return None
-            except domande.PassaggioNonAmmesso:
-                continue   # la risposta e' arrivata proprio adesso: rileggo
-        time.sleep(0.2)
+    try:
+        while True:
+            scheda = domande.leggi(identificativo)
+            if scheda.get("stato") == "risposta-consegnata":
+                break
+            if scheda.get("stato") == "annullata":
+                return None   # risposto nel terminale
+            if adesso() >= fine:
+                try:
+                    domande.passa(identificativo, "annullata", "ciro", "passata al terminale",
+                                  solo_da=("ricevuta", "in-valutazione", "in-attesa"))
+                    registra("hook-scaduto", domanda_id=identificativo)
+                    return None
+                except domande.PassaggioNonAmmesso:
+                    continue   # la risposta e' arrivata proprio adesso: rileggo
+            time.sleep(0.2)
+    finally:
+        if richiesta:
+            _richieste_opencode.pop(richiesta, None)
     esito = scheda.get("risposta") or {}
     scelta = str(esito.get("scelta") or "")
     if esito.get("motivo") != "utente" or scelta not in opzioni:
@@ -1694,6 +1753,11 @@ class Gestore(BaseHTTPRequestHandler):
                 with _coda_lock:
                     _coda.append({"testo": testo, "da": dato.get("da") or "opencode"})
                 self._invia(200, json.dumps({"ok": True}))
+            elif percorso == "/hooks/opencode":
+                uscita = gestisci_opencode(json.loads(corpo or b"{}"))
+                self._invia(200, json.dumps(uscita) if uscita else b"")
+            elif percorso == "/hooks/opencode/risposto":
+                self._invia(200, json.dumps({"chiusa": opencode_risposto(json.loads(corpo or b"{}"))}))
             elif percorso == "/hooks/claude":
                 # hook http di Claude Code: risposta vuota = chiedi nel terminale
                 uscita = gestisci_hook(json.loads(corpo or b"{}"))

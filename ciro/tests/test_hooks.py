@@ -28,7 +28,7 @@ DOMANDA = {"hook_event_name": "PreToolUse", "session_id": "s2", "cwd": "/tmp/pro
                                                      {"label": "MySQL", "description": "z"}]}]}}
 
 
-class TestHook(BaseCiro):
+class BaseHook(BaseCiro):
     def setUp(self):
         super().setUp()
         self.muto_prima = server.muto
@@ -52,6 +52,8 @@ class TestHook(BaseCiro):
         self.giro()                    # Ciro announces it (in-attesa, number said aloud)
         return filo, esito
 
+
+class TestHook(BaseHook):
     def test_ciro_spento_chiede_nel_terminale(self):
         server._pagina["sveglia"] = 0.0
         self.assertIsNone(server.gestisci_hook(PERMESSO, attesa=1))
@@ -159,6 +161,49 @@ class TestHook(BaseCiro):
                          "vuole consultare il web: example.com")
 
 
+class TestOpenCode(BaseHook):
+    def in_corso_oc(self, dato, attesa=5):
+        esito = {}
+        filo = threading.Thread(target=lambda: esito.update(uscita=server.gestisci_opencode(dato, attesa=attesa)))
+        filo.start()
+        for _ in range(100):
+            if domande.elenca():
+                break
+            time.sleep(0.05)
+        self.giro()
+        return filo, esito
+
+    RICHIESTA = {"requestID": "per_1", "sessionID": "ses_1", "permission": "bash", "patterns": ["git push"],
+                 "title": "rilascio", "directory": "/Users/x/progetti/atlas"}
+
+    def test_permesso_opencode_consentito(self):
+        filo, esito = self.in_corso_oc(self.RICHIESTA)
+        detti = [v["testo"] for v in self.coda()]
+        self.assertTrue(any("da rilascio, atlas: vuole eseguire: git push" in d.lower() for d in detti), detti)
+        self.assertTrue(self.c.chiedi("sì")["mandato"])
+        filo.join(5)
+        self.assertEqual(esito["uscita"], {"reply": "once"})
+
+    def test_permesso_opencode_negato(self):
+        filo, esito = self.in_corso_oc(self.RICHIESTA)
+        self.c.chiedi("no")
+        filo.join(5)
+        self.assertEqual(esito["uscita"], {"reply": "reject"})
+
+    def test_risposto_nel_terminale_chiude_la_domanda(self):
+        filo, esito = self.in_corso_oc(self.RICHIESTA)
+        self.assertTrue(server.opencode_risposto({"requestID": "per_1"}))
+        filo.join(5)
+        self.assertIsNone(esito["uscita"])
+        self.assertEqual(domande.elenca()[0]["stato"], "annullata")
+        self.assertFalse(server.opencode_risposto({"requestID": "per_1"}))   # already closed
+
+    def test_riassunti_opencode(self):
+        self.assertEqual(server.riassunto_opencode("edit", ["/a/b/app.py"]), "vuole modificare il file app.py")
+        self.assertEqual(server.riassunto_opencode("external_directory", ["/tmp/*"]),
+                         "vuole il permesso external_directory: /tmp/*")
+
+
 class TestCollega(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="ciro-collega-"))
@@ -190,6 +235,19 @@ class TestCollega(unittest.TestCase):
         dati = json.loads(self.file.read_text(encoding="utf-8"))
         self.assertFalse(collega.collegato(dati))
         self.assertEqual(dati, {"model": "opus", "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [self.altro]}]}})
+
+    def test_plugin_opencode(self):
+        destinazione = self.tmp / "plugins" / "ciro.js"
+        argomenti = ["--impostazioni", str(self.file), "--plugin-opencode", str(destinazione)]
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            collega.principale(["connect-opencode"] + argomenti)
+            self.assertEqual(destinazione.read_bytes(), collega.PLUGIN_SORGENTE.read_bytes())
+            collega.principale(["connect-opencode"] + argomenti)            # idempotent, no backup
+            self.assertEqual(list(destinazione.parent.glob("*.bak-ciro-*")), [])
+            collega.principale(["disconnect-opencode"] + argomenti)
+        self.assertFalse(destinazione.exists())
 
     def test_file_che_non_esiste(self):
         self.file.unlink()
