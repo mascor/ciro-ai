@@ -1103,8 +1103,12 @@ class Cervello:
                 "",
             ]
         if self.riassunto:
-            parti += ["Summary of earlier conversations with the user:" if en else
-                      "Riassunto delle conversazioni precedenti con l'utente:", self.riassunto, ""]
+            parti += ["Summary of earlier conversations with the user (it may be out of date: a question "
+                      "is still open only if it is in the sessions or in the mail above; never ask again "
+                      "about one that is not there):" if en else
+                      "Riassunto delle conversazioni precedenti con l'utente (puo' essere vecchio: una domanda "
+                      "e' ancora aperta solo se e' nelle sessioni o nella posta qui sopra; non riproporre "
+                      "quelle che non ci sono):", self.riassunto, ""]
         utente = "User" if en else "Utente"
         if self.storico:
             intestazione = "Conversation so far" if en else "Conversazione fin qui"

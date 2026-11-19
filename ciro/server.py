@@ -286,6 +286,15 @@ def pulisci_trascrizione(testo):
     return " ".join(testo.split())
 
 
+# un verso da solo (respiro, esitazione, rumore) non e' una frase: whisper lo scrive
+# come «e» e il modello rifaceva l'ultima domanda a ogni respiro (19/11)
+VERSI = {"e", "eh", "ehm", "em", "uhm", "um", "uh", "mm", "mmh", "mmm", "hm", "hmm", "ehh"}
+
+
+def solo_verso(testo):
+    return re.sub(r"[^a-z]", "", (testo or "").lower()) in VERSI
+
+
 def trascrivi(byte_audio):
     """Trascrive un WAV (qualsiasi frequenza) in italiano con whisper.cpp."""
     if not MODELLO_WHISPER.exists():
@@ -320,6 +329,9 @@ def trascrivi(byte_audio):
                                                          "thanks", "you", "thankyouforwatching", "bye"):
             log("scartata frase inventata da whisper: " + testo[:80])
             registra("ascolto-scartato", testo=testo, motivo="frase inventata da whisper")
+            return ""
+        if solo_verso(testo):
+            registra("ascolto-scartato", testo=testo, motivo="solo un verso")
             return ""
         return testo
 
