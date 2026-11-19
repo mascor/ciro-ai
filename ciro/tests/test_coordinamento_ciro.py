@@ -31,10 +31,11 @@ class BaseCiro(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="ciro-test-"))
         self.env = {k: os.environ.get(k) for k in ("POSTA_RADICE", "CIRO_AUTORIZZAZIONI",
-                                                   "POSTA_REGISTRO")}
+                                                   "POSTA_REGISTRO", "CIRO_DEEPSEEK_DIRETTO")}
         os.environ["POSTA_RADICE"] = str(self.tmp / "posta")
         os.environ["CIRO_AUTORIZZAZIONI"] = str(self.tmp / "autorizzazioni.json")
         os.environ["POSTA_REGISTRO"] = str(self.tmp / "registro.log")
+        os.environ["CIRO_DEEPSEEK_DIRETTO"] = "0"   # the tests never call the real model
         self.originali = {
             "REGISTRO": modulo_cervello.REGISTRO, "MEMORIA": modulo_cervello.MEMORIA,
             "CONTESTO": modulo_cervello.CONTESTO, "leggi_sessioni": modulo_cervello.leggi_sessioni,
