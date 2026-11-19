@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ciro Agente",
-  "version": "1.4",
+  "version": "1.5",
   "description": "Gli occhi di Ciro nel browser: legge i consumi di Claude, OpenCode Go e DeepSeek e i messaggi non letti di Google Chat dalle pagine in cui sei gia' collegato, e li manda a Ciro sul Mac (127.0.0.1).",
   "permissions": [
     "alarms",
@@ -12,7 +12,8 @@
     "https://opencode.ai/*",
     "https://platform.deepseek.com/*",
     "http://127.0.0.1:8765/*",
-    "https://chat.google.com/*"
+    "https://chat.google.com/*",
+    "https://mail.google.com/*"
   ],
   "background": {
     "service_worker": "sfondo.js"
@@ -41,13 +42,15 @@
     },
     {
       "matches": [
-        "https://chat.google.com/*"
+        "https://chat.google.com/*",
+        "https://mail.google.com/chat/*",
+        "https://mail.google.com/mail/*"
       ],
       "js": [
         "chat.js"
       ],
       "run_at": "document_idle",
-      "all_frames": false
+      "all_frames": true
     }
   ]
 }

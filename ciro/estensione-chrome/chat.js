@@ -28,14 +28,38 @@ function nonLetti() {
   return conversazioni;
 }
 
+// when the list is not found: only counts of page elements, never any text,
+// so Ciro can tell where the conversations are (sent once a minute, top page only)
+let ultimaDiagnosi = 0;
+function diagnosi() {
+  const conta = (selettore) => document.querySelectorAll(selettore).length;
+  return {
+    pagina: location.hostname + location.pathname.replace(/\/[^/]{12,}/g, "/…"),
+    cornice: window.top === window ? "principale" : "interna",
+    gruppi: conta("[data-group-id]"),
+    gruppi_span: conta("span[data-group-id]"),
+    gruppi_div: conta("div[data-group-id]"),
+    non_letti_attr: conta('[data-is-unread="true"]'),
+    aria_non_letto: conta('[aria-label*="non lett" i],[aria-label*="unread" i]'),
+    listitem: conta('[role="listitem"]'),
+    treeitem: conta('[role="treeitem"]'),
+    iframe: conta("iframe"),
+  };
+}
+
 function manda() {
   const conversazioni = nonLetti();
-  if (conversazioni === null) return;
+  if (conversazioni === null) {
+    if (Date.now() - ultimaDiagnosi < 60000) return;
+    ultimaDiagnosi = Date.now();
+    chrome.runtime.sendMessage({ tipo: "chat-non-letti",
+      dato: { account: accountDellaPagina(), conversazioni: null, diagnosi: diagnosi() } }).catch(() => {});
+    return;
+  }
   chrome.runtime.sendMessage({ tipo: "chat-non-letti", dato: { account: accountDellaPagina(), conversazioni } })
     .catch(() => {});
 }
 
-if (window.top === window && location.hostname === "chat.google.com") {
-  setTimeout(manda, 5000);
-  setInterval(manda, 20000);
-}
+// every Chat page and frame, also Chat inside Gmail
+setTimeout(manda, 5000);
+setInterval(manda, 20000);

@@ -589,7 +589,8 @@ async function inviaDiscorso(pezzi, pause) {
   const wav = codificaWav(pezzi, ctxRec.sampleRate);
   impostaFase("penso");
   try {
-    const risposta = await fetch("/api/ascolta", {
+    // aspetta il nome: il server usa il modello grande, che sbaglia meno «Ciro»
+    const risposta = await fetch(serveNome() ? "/api/ascolta?nome=1" : "/api/ascolta", {
       method: "POST",
       headers: { "Content-Type": "audio/wav" },
       body: wav,

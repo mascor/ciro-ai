@@ -5,7 +5,11 @@ Run from ciro/: python3 -m unittest tests.test_nome
 
 import unittest
 
-from tests.test_coordinamento_ciro import server
+import time
+
+from tests.test_coordinamento_ciro import BaseCiro, server
+
+import nome as modulo_nome
 
 
 class TestNome(unittest.TestCase):
@@ -35,6 +39,38 @@ class TestNome(unittest.TestCase):
                       "e poi", "il giro del mondo in ottanta giorni",
                       "Ho detto a Ciro di aspettare", "Cirocalibrati e poi", ""):
             self.assertEqual(server.togli_nome(detto)[0], False, detto)
+
+
+class TestVarianti(BaseCiro):
+    def setUp(self):
+        super().setUp()
+        server._tentativi_nome.clear()
+
+    def test_variante_imparata(self):
+        self.assertFalse(server.togli_nome("quacca")[0])
+        self.assertTrue(modulo_nome.impara_variante("quacca"))
+        self.assertEqual(server.togli_nome("quacca"), (True, ""))
+        self.assertEqual(server.togli_nome("Quacca, come stanno le sessioni?"), (True, "come stanno le sessioni?"))
+
+    def test_mai_versi_o_risposte(self):
+        for detto in ("e", "eh", "sì", "no", "tre", "una frase lunga di parole"):
+            self.assertFalse(modulo_nome.impara_variante(detto), detto)
+
+    def test_impara_dall_uso(self):
+        t0 = time.time()
+        server.nota_ascolto_nome("quacca", False, t0)
+        self.assertEqual(server.nota_ascolto_nome("ehi, giro", True, t0 + 5), ["quacca"])
+        self.assertEqual(server.togli_nome("quacca"), (True, ""))
+
+    def test_troppo_tardi_non_impara(self):
+        t0 = time.time()
+        server.nota_ascolto_nome("pippo", False, t0)
+        self.assertEqual(server.nota_ascolto_nome("ehi ciro", True, t0 + 11), [])
+        self.assertFalse(server.togli_nome("pippo")[0])
+
+    def test_modello_grande_per_il_nome(self):
+        self.assertEqual(server.passate_whisper(2.0, True, grande=True), [("preciso", True), ("preciso", False)])
+        self.assertEqual(server.passate_whisper(2.0, True), [("rapido", True), ("rapido", False)])
 
 
 if __name__ == "__main__":

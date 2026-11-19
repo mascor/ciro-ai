@@ -92,8 +92,8 @@ class TestCalibrazioneInglese(BaseInglese):
         esito = self.c.chiedi("calibrate")
         self.assertIn("stay silent", esito["risposta"].lower())
         self.assertEqual(self.c.collaudo.silenzio(0.002, 0.003, 0.01), "Now repeat after me: one.")
-        for detta in ("one", "Two", "yes", "no", "one for test 2", "how are the sessions today"):
+        for detta in ("one", "Two", "yes", "no", "Hey Ciro", "Hey Ciro", "Hey Ciro", "one for test 2", "how are the sessions today"):
             self.c.chiedi(detta)
-        self.assertTrue(detti[-1].startswith("Calibration done: I understood 6 phrases out of 6"), detti)
+        self.assertTrue(detti[-1].startswith("Calibration done: I understood 9 phrases out of 9"), detti)
         self.assertTrue(modulo_cervello.leggi_impostazioni()["calibrato_en"])
         self.assertNotIn("calibrato", modulo_cervello.leggi_impostazioni())

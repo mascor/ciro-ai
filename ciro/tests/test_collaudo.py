@@ -48,7 +48,7 @@ class TestCalibrazione(BaseCollaudo):
         self.assertEqual(self.c.gestisci("pausa progetti", 0.05)["risposta"], "Aspetta, sto misurando il silenzio.")
         self.assertEqual(self.c.silenzio(0.002, 0.004, 0.01), "Ora ripeti dopo di me: uno.")
         guida = self.c.stato_guida()
-        self.assertEqual((guida["fase"], guida["passo"], guida["totale"], guida["dire"]), ("frasi", 1, 6, "uno"))
+        self.assertEqual((guida["fase"], guida["passo"], guida["totale"], guida["dire"]), ("frasi", 1, 9, "uno"))
 
     def test_frasi_giuste_e_sbagliate(self):
         self.c.avvia("calibrazione")
@@ -78,11 +78,11 @@ class TestCalibrazione(BaseCollaudo):
     def test_fine_soglia_da_rumore_e_voce(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.004, 0.01)
-        for detta in ("uno", "Due", "si", "No.", "uno per prova 2", "Come stanno le sessioni oggi?"):
+        for detta in ("uno", "Due", "si", "No.", "Ehi Ciro.", "ehi, giro", "quacca", "uno per prova 2", "Come stanno le sessioni oggi?"):
             self.c.gestisci(detta, 0.08)
         self.assertEqual(self.c.fase, "fine")
         self.assertTrue(self.detti[-1].startswith("Calibrazione finita"), self.detti)
-        self.assertIn("6 frasi su 6", self.detti[-1])
+        self.assertIn("9 frasi su 9", self.detti[-1])
         # first use is over: the calibration will not start by itself again
         self.assertTrue(modulo_cervello.leggi_impostazioni()["calibrato"])
         # threshold between the room noise (2.5 x p95) and the voice (0.35 x median)
@@ -93,7 +93,7 @@ class TestCalibrazione(BaseCollaudo):
         self.assertIn("Rumore", self.rapporti()[0].read_text(encoding="utf-8"))
         guida = self.c.stato_guida()
         self.assertEqual(guida["fase"], "fine")
-        self.assertIn("6 frasi su 6", guida["riepilogo"])
+        self.assertIn("9 frasi su 9", guida["riepilogo"])
         self.c.chiudi()
         self.assertIsNone(self.c.stato_guida())
         self.assertEqual(self.c.fase, "spento")
@@ -101,7 +101,7 @@ class TestCalibrazione(BaseCollaudo):
     def test_voce_debole_avvisa_e_soglia_sotto_la_voce(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.008, 0.02, 0.03)           # noisy room
-        for detta in ("uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"):
+        for detta in ("uno", "due", "sì", "no", "Ehi Ciro", "Ehi Ciro", "Ehi Ciro", "uno per prova due", "come stanno le sessioni oggi"):
             self.c.gestisci(detta, 0.03)              # quiet voice: 0.35 x 0.03 = 0.0105
         self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.015)  # half the voice
         self.assertIn("avvicinati al microfono", self.detti[-1])
@@ -109,7 +109,7 @@ class TestCalibrazione(BaseCollaudo):
     def test_picco_nel_silenzio_non_da_falso_avviso(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.0048, 0.0227, 0.0277)      # quiet room with one peak (19/11, real data)
-        for detta in ("uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"):
+        for detta in ("uno", "due", "sì", "no", "Ehi Ciro", "Ehi Ciro", "Ehi Ciro", "uno per prova due", "come stanno le sessioni oggi"):
             self.c.gestisci(detta, 0.0832)
         self.assertNotIn("avvicinati", self.detti[-1])
         self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.02)
@@ -117,7 +117,7 @@ class TestCalibrazione(BaseCollaudo):
     def test_frase_lunga_basta_la_maggior_parte(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.003, 0.01)
-        for detta in ("uno", "due", "sì", "no", "uno per prova due"):
+        for detta in ("uno", "due", "sì", "no", "Ehi Ciro", "Ehi Ciro", "Ehi Ciro", "uno per prova due"):
             self.c.gestisci(detta, 0.05)
         self.c.gestisci("come stanno sessioni oggi", 0.05)
         self.assertTrue(self.c.frasi_sentite[-1]["ok"])
@@ -127,7 +127,7 @@ class TestCalibrazione(BaseCollaudo):
         self.c.silenzio(0.002, 0.003, 0.01, eco=0.4)
         self.c.gestisci("di", 0.05, [])               # «uno» heard as «di»: retry
         self.c.gestisci("uno", 0.05, [300])
-        for detta, pause in (("due", []), ("sì", []), ("no", []), ("uno per prova due", [250, 400]),
+        for detta, pause in (("due", []), ("sì", []), ("no", []), ("Ehi Ciro", []), ("Ehi Ciro", []), ("Ehi Ciro", []), ("uno per prova due", [250, 400]),
                              ("come stanno le sessioni oggi", [350, 500, 300])):
             self.c.gestisci(detta, 0.05, pause)
         profilo = modulo_cervello.profilo_voce()
@@ -141,7 +141,7 @@ class TestCalibrazione(BaseCollaudo):
         # fluent speech (19/11, real): no pause inside the phrases -> 700 ms instead of 900
         self.c.avvia("calibrazione")
         self.c.silenzio(0.0004, 0.001, 0.0013)
-        for detta in ("uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"):
+        for detta in ("uno", "due", "sì", "no", "Ehi Ciro", "Ehi Ciro", "Ehi Ciro", "uno per prova due", "come stanno le sessioni oggi"):
             self.c.gestisci(detta, 0.07, [])
         self.assertEqual(modulo_cervello.profilo_voce()["fine_frase_ms"], 700)
 
@@ -277,6 +277,21 @@ class TestCollaudoNelCervello(BaseCiro):
         self.giro()
         self.assertTrue(server._cervello.chiedi("vi")["risposta"].startswith("Mandato"), server._cervello.chiedi("vi")["risposta"])
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "B")
+
+
+class TestNomeNellaCalibrazione(BaseCollaudo):
+    def test_nome_detto_male_diventa_variante(self):
+        import nome as modulo_nome
+        self.c.avvia("calibrazione")
+        self.c.silenzio(0.002, 0.003, 0.01)
+        for detta in ("uno", "due", "sì", "no"):
+            self.c.gestisci(detta, 0.05)
+        self.assertEqual(self.c.stato_guida()["dire"], "ehi ciro")
+        self.c.gestisci("quacca", 0.05)        # how whisper wrote «Ehi Ciro» for this voice
+        self.assertTrue(self.c.frasi_sentite[-1]["ok"])
+        self.assertEqual(modulo_nome.togli_nome("quacca"), (True, ""))
+        self.c.gestisci("e", 0.05)             # a breath: nothing learned, asked again
+        self.assertEqual(self.c.stato_guida()["ultima"]["ok"], False)
 
 
 if __name__ == "__main__":

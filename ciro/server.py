@@ -18,12 +18,13 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cervello as modulo_cervello
 from testi import lingua, t  # noqa: E402
 import chat as modulo_chat
+import nome as modulo_nome
 import numeri as numeri_parlati
 import testi as modulo_testi  # noqa: E402
 
@@ -273,11 +274,13 @@ def impara_audio(da_imparare, cartella=None):
     return None
 
 
-def passate_whisper(durata, rapido_esiste=None):
+def passate_whisper(durata, rapido_esiste=None, grande=False):
     """Le passate da provare in ordine: (modello, con VAD). Per l'audio breve,
     se il VAD scarta tutto (una «A» cortissima), una seconda passata senza VAD."""
     if rapido_esiste is None:
         rapido_esiste = modello_rapido().is_file()
+    if durata <= AUDIO_BREVE and grande:   # aspetta il nome: il modello grande sbaglia meno i nomi
+        return [("preciso", True), ("preciso", False)]
     if durata <= AUDIO_BREVE and rapido_esiste:
         return [("rapido", True), ("rapido", False)]
     return [("preciso", True)]
@@ -305,43 +308,32 @@ def solo_stop(testo):
     return bool(STOP_RE.match(testo or ""))
 
 
-# «Ehi Ciro»: Ciro risponde solo se lo chiami (o nei 15 s dopo che ha parlato).
-# Il nome all'inizio della frase, anche come lo scrive whisper (Kiro, Chiro, ciro').
-NOME_RE = re.compile(r"^\W*(?:(?:ehi|ehy|hey|ei|ok|okay|oh)\W+)?(?:ciro|kiro|chiro|cyro|ciroo|cirò)\b'?[\s,.:;!?]*", re.I)
-# dopo «ehi» whisper (modello veloce) storpia il nome: «ehi, tiro!», «Ehi Giro», «e il giro»
-NOME_DOPO_EHI_RE = re.compile(r"^\W*(?:ehi|ehy|hey|hei|ei|eh|e)\W+(?:il\W+)?(?:tiro|giro|siro|piro|ciro|kiro|chiro)\b'?[\s,.:;!?]*", re.I)
-CHIAMATE = ("ehiciro", "heyciro", "eiciro", "okciro", "ciro")
+# «Ehi Ciro»: il riconoscimento del nome sta in nome.py (anche la calibrazione lo usa)
+togli_nome = modulo_nome.togli_nome
+_tentativi_nome = collections.deque(maxlen=5)   # frasi non riconosciute mentre aspettava il nome
 
 
-def _distanza(a, b):
-    riga = list(range(len(b) + 1))
-    for i, ca in enumerate(a, 1):
-        prima, riga[0] = riga[0], i
-        for j, cb in enumerate(b, 1):
-            prima, riga[j] = riga[j], min(riga[j] + 1, riga[j - 1] + 1, prima + (ca != cb))
-    return riga[-1]
-
-
-def togli_nome(testo):
-    """(chiamato, resto): «Ciro, come va?» -> (True, «come va?»)."""
-    testo = (testo or "").strip()
-    trovato = NOME_RE.match(testo) or NOME_DOPO_EHI_RE.match(testo)
-    if trovato:
-        return True, testo[trovato.end():].strip()
-    # solo il nome, detto male: una frase di al massimo 3 parole che suona come «Ehi Ciro»
-    if 0 < len(testo.split()) <= 3:
-        compatto = re.sub(r"[^a-zò]", "", testo.lower())
-        soglia = 1 if len(compatto) <= 5 else 2
-        if compatto and min(_distanza(compatto, c) for c in CHIAMATE) <= soglia:
-            return True, ""
-    return False, testo
+def nota_ascolto_nome(testo, chiamato, adesso=None):
+    """Mentre aspetta il nome: un tentativo non riconosciuto seguito entro 10 s da una
+    chiamata riconosciuta era il nome detto male -> diventa una variante di questa voce."""
+    adesso = time.time() if adesso is None else adesso
+    if not chiamato:
+        if testo:
+            _tentativi_nome.append((adesso, testo))
+        return []
+    imparate = [t_ for quando, t_ in _tentativi_nome
+                if adesso - quando <= 10 and modulo_nome.impara_variante(t_)]
+    _tentativi_nome.clear()
+    if imparate:
+        registra("nome-imparato", varianti=imparate)
+    return imparate
 
 
 def solo_verso(testo):
     return bool(VERSO_RE.match(re.sub(r"[^a-z]", "", (testo or "").lower())))
 
 
-def trascrivi(byte_audio):
+def trascrivi(byte_audio, grande=False):
     """Trascrive un WAV (qualsiasi frequenza) in italiano con whisper.cpp."""
     if not MODELLO_WHISPER.exists():
         raise RuntimeError("manca il modello whisper in " + str(MODELLO_WHISPER))
@@ -354,7 +346,7 @@ def trascrivi(byte_audio):
                        check=True, timeout=60)
         durata = max(0, pronto.stat().st_size - 44) / 32000.0
         testo = ""
-        for modello, con_vad in passate_whisper(durata):
+        for modello, con_vad in passate_whisper(durata, grande=grande):
             # VAD tarato sulla voce vera: con i valori predefiniti una «A» detta da sola
             # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
             vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
@@ -764,6 +756,15 @@ def _giudica(voci):
 
 
 def ricevi_chat(dato, in_sottofondo=True):
+    if dato.get("conversazioni") is None:   # l'elenco non e' nella pagina: solo conteggi, per capire dove sta
+        try:
+            file_diagnosi = Path(modulo_cervello.CONTESTO).with_name("chat-diagnosi.json")
+            vecchie = json.loads(file_diagnosi.read_text(encoding="utf-8")) if file_diagnosi.exists() else []
+            vecchie = (vecchie + [dict(dato.get("diagnosi") or {}, ora=time.strftime("%H:%M:%S"))])[-30:]
+            file_diagnosi.write_text(json.dumps(vecchie, ensure_ascii=False, indent=1), encoding="utf-8")
+        except (OSError, ValueError):
+            pass
+        return
     nuove = _chat.aggiorna(dato.get("account"), dato.get("conversazioni") or [])
     if not nuove:
         return
@@ -1441,12 +1442,15 @@ class Gestore(BaseHTTPRequestHandler):
                     except (OSError, ValueError, IndexError):
                         pass
                 inizio = time.time()
-                testo = trascrivi(corpo)
+                aspetta_nome = parse_qs(urlparse(self.path).query).get("nome") == ["1"]
+                testo = trascrivi(corpo, grande=aspetta_nome)
                 if testo:
                     _ultimi_audio.append((testo, corpo))
                 registra("ascolto", testo=testo, audio_kb=len(corpo) // 1024,
                          secondi_trascrizione=round(time.time() - inizio, 1))
                 chiamato, resto = togli_nome(testo)
+                if aspetta_nome:
+                    nota_ascolto_nome(testo, chiamato)
                 self._invia(200, json.dumps({"testo": testo, "chiamato": chiamato, "resto": resto}))
             elif percorso == "/api/messaggio":
                 dato = json.loads(corpo or b"{}")

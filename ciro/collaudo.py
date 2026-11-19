@@ -20,9 +20,12 @@ from pathlib import Path
 import cervello as modulo_cervello
 from testi import lingua, per_lingua, t
 
-FRASI = ["uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"]
+FRASI = ["uno", "due", "sì", "no", "ehi ciro", "ehi ciro", "ehi ciro", "uno per prova due",
+         "come stanno le sessioni oggi"]
+NOME_DETTO = ("ehi ciro", "hey ciro")   # come whisper scrive il nome in questa voce: varianti apprese
 FRASE_LIBERA = FRASI[-1]   # misura le pause e il riconoscimento delle frasi libere
-FRASI_EN = ["one", "two", "yes", "no", "one for test two", "how are the sessions today"]
+FRASI_EN = ["one", "two", "yes", "no", "hey ciro", "hey ciro", "hey ciro", "one for test two",
+            "how are the sessions today"]
 NUMERI_EN = {"0": "zero", "1": "one", "2": "two", "3": "three"}
 SILENZIO_SECONDI = 5
 PROGETTI_PROVA = ["prova-ciro", "prova-due"]
@@ -192,6 +195,9 @@ class Collaudo:
         self.tentativi = []
 
     def _uguale(self, attesa, sentita):
+        if attesa in NOME_DETTO:   # «Ehi Ciro»: riconosciuto, oppure imparato com'e' scritto
+            import nome as modulo_nome
+            return modulo_nome.togli_nome(sentita) == (True, "") or modulo_nome.impara_variante(sentita)
         a, s = normalizza(attesa), normalizza(sentita)
         if a == s:
             return True
