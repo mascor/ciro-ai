@@ -1015,3 +1015,5 @@ button {
 .spazi-chiusi b { font-weight: 600; }
 /* i simboli del sonno restano nella zona di Ciro, non sopra le colonne */
 #sogni { left: var(--fascia); right: var(--destra); z-index: 0; }
+.messaggio.corta { padding-top: 5px; padding-bottom: 5px; }
+.messaggio.corta .chi { font-weight: 500; font-size: 14px; }

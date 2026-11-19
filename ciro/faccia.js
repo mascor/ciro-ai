@@ -844,7 +844,6 @@ function testoAttesa(secondi) {
 // per casella, ognuna con il suo colore fisso, una riga per messaggio e gli
 // spazi non urgenti compressi in una riga.
 const COLORI_CASELLE = ["139, 124, 246", "52, 211, 153", "96, 165, 250", "244, 114, 182", "45, 212, 191", "251, 146, 60"];
-const spaziAperti = new Set();   // caselle con gli spazi mostrati per intero (clic)
 function coloreCasella(account) {
   let h = 0;
   for (const c of String(account || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -883,7 +882,11 @@ function rigaMessaggio(attesa) {
   const testo = document.createElement("span");
   testo.className = "testo";
   testo.textContent = attesa.testo || "";
-  riga.append(attesa.numero ? numeroDi(attesa) : document.createElement("span"), chi, quando, testo);
+  // uno spazio senza anteprima: solo nome e tempo, niente «Messaggi non letti»
+  const vuoto = !attesa.testo || ["Messaggi non letti", "Unread messages"].includes(attesa.testo);
+  if (vuoto) riga.classList.add("corta");
+  riga.append(attesa.numero ? numeroDi(attesa) : document.createElement("span"), chi, quando);
+  if (!vuoto) riga.appendChild(testo);
   if (attesa.motivo) {   // il giudizio del modello: perche' e' (o non e') urgente
     const motivo = document.createElement("span");
     motivo.className = "motivo";
@@ -938,18 +941,8 @@ function disegnaCaselle(chat) {
       scheda.appendChild(nota);
     }
     for (const attesa of diretti) scheda.appendChild(rigaMessaggio(attesa));
-    if (spazi.length && spaziAperti.has(casella)) {
-      for (const attesa of spazi) scheda.appendChild(rigaMessaggio(attesa));
-    } else if (spazi.length) {
-      const chiusi = document.createElement("div");
-      chiusi.className = "spazi-chiusi";
-      const quanti = document.createElement("b");
-      quanti.textContent = "▸ " + T(spazi.length === 1 ? "%d spazio" : "%d spazi", spazi.length);
-      chiusi.append(quanti, " " + T("con messaggi non letti: %s", spazi.map((v) => v.mittente || "?").join(", ")));
-      chiusi.title = T("Clicca per vederli");
-      chiusi.addEventListener("click", () => { spaziAperti.add(casella); disegnaAttese(ultimeAttese); });
-      scheda.appendChild(chiusi);
-    }
+    // 19/11/2026: ogni spazio su una riga corta (numero, nome, da quanto), tutti visibili
+    for (const attesa of spazi) scheda.appendChild(rigaMessaggio(attesa));
     pannelloAttese.appendChild(scheda);
   }
 }
@@ -994,7 +987,10 @@ function disegnaDomande(elenco) {
     testa.className = "attesa-testa";
     const progetto = document.createElement("b");
     // un messaggio di Google Chat: chi scrive al posto del progetto
-    progetto.textContent = diChat ? (attesa.mittente || "?") : (attesa.progetto || "?");
+    // il nome dato alla sessione con /rename, se c'e', prima del progetto
+    progetto.textContent = diChat ? (attesa.mittente || "?")
+      : (attesa.sessione && attesa.sessione.toLowerCase() !== String(attesa.progetto || "").toLowerCase()
+        ? `${attesa.sessione} · ${attesa.progetto}` : (attesa.progetto || "?"));
     if (attesa.numero) {
       // il numero della domanda: a voce «tre, sì» invece del nome del progetto
       const numero = document.createElement("span");

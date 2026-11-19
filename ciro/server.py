@@ -621,7 +621,7 @@ def attese(sessioni=None):
         if scheda.get("stato") != "in-attesa":
             continue
         dal = float((scheda.get("storia") or [{}])[0].get("t") or adesso_s)
-        elenco.append({"progetto": scheda.get("progetto"), "tipo": "decisione",
+        elenco.append({"progetto": scheda.get("progetto"), "sessione": scheda.get("sessione"), "tipo": "decisione",
                        "testo": (scheda.get("domanda") or "")[:280],
                        "secondi": int(adesso_s - dal), "domanda_id": scheda.get("id"),
                        "opzioni": modulo_cervello.opzioni_per_voce(scheda),
@@ -945,6 +945,13 @@ def _come_scritto(testo):
     return pulito
 
 
+def nome_da_dire(scheda):
+    """«test, OPENCODE-SKILLS» se la sessione ha un nome dato con /rename, se no il progetto."""
+    progetto = scheda.get("progetto") or t("una sessione")
+    sessione = (scheda.get("sessione") or "").strip()
+    return "%s, %s" % (sessione, progetto) if sessione and sessione.lower() != progetto.lower() else progetto
+
+
 def frase_domanda(scheda):
     domanda = _testo_parlabile(scheda.get("domanda") or scheda.get("oggetto") or "")
     if domanda and domanda[-1] not in "?.!":
@@ -953,7 +960,7 @@ def frase_domanda(scheda):
     # a voce le opzioni sono numeri («uno, procedi; due, fermati»): le lettere si confondono
     opzioni = "; ".join("%s, %s" % (modulo_cervello.nome_opzione(lettera), _come_scritto(testo))
                         for lettera, testo in dette.items())
-    frase = t("Da %s: %s") % (scheda.get("progetto") or t("una sessione"), domanda)
+    frase = t("Da %s: %s") % (nome_da_dire(scheda), domanda)
     if scheda.get("operazione") == "credenziali":
         return frase + t(" Scrivila nel campo protetto della pagina.")
     if opzioni:
@@ -1132,6 +1139,27 @@ def riassunto_permesso(strumento, ingresso):
     return t("vuole usare %s") % strumento
 
 
+def titolo_sessione(percorso, massimo=20_000_000):
+    """Il nome dato alla sessione con /rename (riga «custom-title» del transcript), o ""."""
+    titolo = ""
+    try:
+        if not percorso or Path(percorso).stat().st_size > massimo:
+            return ""
+        with open(percorso, encoding="utf-8", errors="ignore") as ingresso:
+            for riga in ingresso:
+                if '"custom-title"' not in riga:
+                    continue
+                try:
+                    voce = json.loads(riga)
+                except ValueError:
+                    continue
+                if voce.get("type") == "custom-title":
+                    titolo = str(voce.get("customTitle") or "").strip()
+    except OSError:
+        return ""
+    return _corto(titolo, 60)
+
+
 def _domanda_da_hook(dato):
     """(progetto, oggetto, domanda, opzioni, operazione, risposta) o None se non la gestiamo.
     `risposta(scelta)` costruisce l'uscita dell'hook per la lettera scelta."""
@@ -1178,7 +1206,8 @@ def gestisci_hook(dato, attesa=None, adesso=time.time):
     if in_pausa(progetto):
         return None
     try:
-        identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione)
+        identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione,
+                                                     sessione=titolo_sessione(dato.get("transcript_path")))
     except Exception as errore:  # noqa: BLE001
         registra("errore-hook", errore=repr(errore)[:300])
         return None

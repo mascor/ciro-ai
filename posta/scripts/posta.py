@@ -1434,7 +1434,7 @@ def chiedi(da, oggetto, domanda, opzioni, operazione, bloccato, raccomanda=None,
     return identificativo
 
 
-def chiedi_da_hook(progetto, oggetto, domanda, opzioni, operazione="permesso", testo=""):
+def chiedi_da_hook(progetto, oggetto, domanda, opzioni, operazione="permesso", testo="", sessione=""):
     """Question from a session hook (Claude Code, OpenCode): only the record, no mail.
 
     The hook waits for the answer in the registry and gives it back to the session
@@ -1453,7 +1453,7 @@ def chiedi_da_hook(progetto, oggetto, domanda, opzioni, operazione="permesso", t
         "domanda": _una_riga(domanda), "opzioni": dict(opzioni), "raccomanda": None,
         "operazione": operazione, "ambiente": None, "condizioni": [],
         "bloccato": _una_riga(oggetto) or "la sessione", "contesto": (testo or "").strip(),
-        "canale": "hook",
+        "canale": "hook", "sessione": _una_riga(sessione)[:60],
     })
     registra("chiedi-hook", progetto, identificativo, {"operazione": operazione})
     return identificativo

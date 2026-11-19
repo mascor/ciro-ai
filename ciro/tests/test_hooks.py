@@ -137,6 +137,20 @@ class TestHook(BaseCiro):
         self.assertEqual(esito["uscita"]["hookSpecificOutput"]["decision"], {"behavior": "allow"})
         self.assertEqual(self.messaggi_a("OPENCODE-SKILLS"), [])
 
+    def test_nome_della_sessione_da_rename(self):
+        transcript = self.tmp / "sessione.jsonl"
+        transcript.write_text("\n".join([
+            json.dumps({"type": "user", "message": {"content": "ciao"}}),
+            json.dumps({"type": "custom-title", "customTitle": "vecchio", "sessionId": "s1"}),
+            json.dumps({"type": "custom-title", "customTitle": "test", "sessionId": "s1"})]) + "\n", encoding="utf-8")
+        self.assertEqual(server.titolo_sessione(str(transcript)), "test")
+        self.assertEqual(server.titolo_sessione(str(self.tmp / "manca.jsonl")), "")
+        filo, esito = self.in_corso(dict(PERMESSO, transcript_path=str(transcript)), attesa=0.6)
+        filo.join(5)
+        self.assertEqual(domande.elenca()[0]["sessione"], "test")
+        detti = [v["testo"] for v in self.coda()]
+        self.assertTrue(any("da test, ironworks:" in d.lower() for d in detti), detti)
+
     def test_riassunti(self):
         self.assertEqual(server.riassunto_permesso("Edit", {"file_path": "/a/b/app.py"}),
                          "vuole modificare il file app.py")
