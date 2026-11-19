@@ -1159,6 +1159,21 @@ async function azioneGuida(azione) {
 document.getElementById("guida-ripeti").addEventListener("click", () => azioneGuida("ripeti"));
 document.getElementById("guida-ferma").addEventListener("click", () => azioneGuida("ferma"));
 document.getElementById("guida-chiudi").addEventListener("click", () => azioneGuida("chiudi"));
+document.getElementById("calibra").addEventListener("click", async () => {
+  if (!sveglia) accendi(false); // per misurare serve il microfono acceso
+  try {
+    const risposta = await fetch("/api/collaudo", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ azione: "avvia" }),
+    });
+    const dato = await risposta.json();
+    if (dato.risposta) {
+      aggiungiMessaggio("lui", dato.risposta);
+      di(dato.risposta);
+    }
+    eseguiComando(dato);
+  } catch (errore) { /* riprovo al prossimo clic */ }
+  aggiornaQuadro();
+});
 
 // ------------------------------------------- calibrazione guidata
 // «Ciro, calibrati»: il server chiede di misurare il silenzio dopo aver parlato.

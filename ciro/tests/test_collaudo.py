@@ -165,6 +165,13 @@ class TestCollaudoNelCervello(BaseCiro):
         self.assertNotIn("Progetti in pausa", esito["risposta"])
         self.assertEqual(self.chiamate_modello, [])
 
+    def test_calibrati_scritto_attaccato(self):
+        for detto in ("cirocalibrati.", "Ciro calibrati!", "calibrazione"):
+            self.collega()
+            esito = server._cervello.chiedi(detto)
+            self.assertEqual(esito.get("comando"), "misura-silenzio", detto)
+            server._cervello.collaudo.ferma()
+
     def test_collaudo_a_voce(self):
         self.collega()
         esito = server._cervello.chiedi("Ciro, collaudo")

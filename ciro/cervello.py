@@ -983,14 +983,15 @@ class Cervello:
         # calibrazione guidata: «Ciro, calibrati»; mentre misura, le frasi non sono comandi
         if self.collaudo is not None:
             detto = re.sub(r"[^\w\s]+", " ", testo.lower()).split()
-            comando = " ".join(w for w in detto if w != "ciro")
-            if comando in ("calibrati", "calibrazione", "fai la calibrazione", "avvia la calibrazione",
-                           "calibrazione guidata"):
+            # whisper a volte attacca le parole («cirocalibrati»): confronto senza spazi
+            comando = re.sub(r"^ciro", "", "".join(w for w in detto if w != "ciro"))
+            if comando in ("calibrati", "calibrazione", "falacalibrazione", "avvialacalibrazione",
+                           "calibrazioneguidata", "calibrare"):
                 risposta = self.collaudo.avvia("calibrazione")
                 self.storico += [("io", testo), ("faccia", risposta)]
                 return {"risposta": risposta, "azione": None, "mandato": False,
                         "comando": "misura-silenzio", "secondi": 5}
-            if comando in ("collaudo", "fai il collaudo", "avvia il collaudo", "collaudati"):
+            if comando in ("collaudo", "failcollaudo", "avviailcollaudo", "collaudati"):
                 risposta = self.collaudo.avvia("collaudo")
                 self.storico += [("io", testo), ("faccia", risposta)]
                 return {"risposta": risposta, "azione": None, "mandato": False}
