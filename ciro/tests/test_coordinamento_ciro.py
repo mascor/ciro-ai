@@ -475,6 +475,16 @@ class TestRisposteVeloci(BaseCiro):
         self.assertIn("lettera", esito["risposta"])
         self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
 
+    def test_risposta_con_le_parole_dell_opzione(self):
+        for detto, lettera, opzioni in (("procedi", "A", {"A": "procedi", "B": "fermati"}),
+                                        ("Uno spazio per cliente.", "B", None)):
+            argomenti = {"opzioni": opzioni} if opzioni else {}
+            identificativo = self.annunciata(oggetto=detto, **argomenti)
+            esito = self.c.chiedi(detto)
+            self.assertTrue(esito["mandato"], (detto, esito))
+            self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], lettera, detto)
+        self.assertEqual(self.modello_chiamato, [])
+
     def test_ok_non_e_una_risposta(self):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
         for detto in ("ok", "perfetto", "certo"):
