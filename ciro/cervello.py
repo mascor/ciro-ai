@@ -593,7 +593,8 @@ class Cervello:
         self._lock = threading.Lock()
         self._compattando = False
         self.domande_aperte = {}   # progetto -> domanda riportata da Ciro
-        self.decisioni_mandate = {}  # progetto -> ora dell'ultimo invio (per "Ti aspettano")
+        # progetto -> ora dell'ultimo invio (per "Ti aspettano"); su file, per i riavvii
+        self.decisioni_mandate = self._leggi_decisioni()
         # domande strutturate (posta.py chiedi)
         self.domanda_corrente = None   # ID dell'ultima domanda detta a voce
         self.domande_in_attesa = {}    # ID -> scheda, in ordine di annuncio
@@ -612,6 +613,25 @@ class Cervello:
         self.ultimo_livello = None    # livello del microfono dell'ultima frase (dalla pagina)
         self.ultime_pause = None      # pause dentro l'ultima frase, in ms (dalla pagina)
         self._carica()
+
+    @staticmethod
+    def _file_decisioni():
+        return Path(CONTESTO).with_name("decisioni-mandate.json")
+
+    def _leggi_decisioni(self):
+        try:
+            dati = json.loads(self._file_decisioni().read_text(encoding="utf-8"))
+            return {str(k): float(v) for k, v in dati.items()} if isinstance(dati, dict) else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def segna_decisione(self, progetto):
+        """Ricorda che la risposta e' partita: "Ti aspettano" non la ripropone, anche dopo un riavvio."""
+        self.decisioni_mandate[progetto] = time.time()
+        try:
+            self._file_decisioni().write_text(json.dumps(self.decisioni_mandate), encoding="utf-8")
+        except OSError:
+            pass
 
     def annota_avviso(self, progetto, frase, domanda=True):
         """Il server ha fatto dire a Ciro un avviso: entra nella conversazione
@@ -690,7 +710,7 @@ class Cervello:
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
         self.sentito_per_risposta[scheda["id"]] = sentito or re.sub(
             r"[^\w'àèéìòù]+", " ", (testo_detto or "").lower()).strip()
-        self.decisioni_mandate[scheda.get("progetto")] = time.time()
+        self.segna_decisione(scheda.get("progetto"))
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
         # dice cosa ha capito: se e' sbagliato lo senti subito («annulla» entro 2 minuti)
         testo_opzione = (scheda.get("opzioni") or {}).get(scelta, "")
@@ -1007,7 +1027,7 @@ class Cervello:
         with self._lock:
             self.domande_in_attesa.pop(scheda["id"], None)
         self.risposte_recenti[scheda["id"]] = (time.time(), scheda, scelta)
-        self.decisioni_mandate[scheda.get("progetto")] = time.time()
+        self.segna_decisione(scheda.get("progetto"))
         self.ultimo_detto = {"tipo": "mandato", "id": scheda["id"], "ora": time.time()}
         return t("Mandato a %s: %s, %s.") % (scheda.get("progetto"), nome_opzione(scelta), opzioni.get(scelta, ""))
 
@@ -1145,7 +1165,7 @@ class Cervello:
         _, errore, codice = _esegui(comando, 20)
         if codice != 0:
             return t("Non sono riuscito a mandarlo: %s") % (errore or "errore della posta")
-        self.decisioni_mandate[azione["a"]] = time.time()
+        self.segna_decisione(azione["a"])
         return t("Mandato a %s.") % azione["a"]
 
     # ------------------------------------------------------------------ fuori

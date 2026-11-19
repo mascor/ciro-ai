@@ -528,6 +528,9 @@ except (OSError, ValueError):
     NOMI_ACCOUNT = {}
 AZIONI_PER_TE = {"decisione": "decisione", "conferma-server": "conferma sul server",
                  "accesso": "accesso"}
+# un messaggio di un progetto senza sessione aperta resta in "Ti aspettano" al massimo
+# 2 ore (un agente su un server non ha sessione sul Mac): dopo, chi l'ha mandato non c'e' piu'
+SENZA_SESSIONE_MAX = 2 * 3600
 
 
 def attese(sessioni=None):
@@ -595,6 +598,8 @@ def attese(sessioni=None):
             continue
         if mossa.get(progetto, 0) > inviato + 45:
             continue
+        if progetto not in mossa and secondi > SENZA_SESSIONE_MAX:
+            continue  # vecchio e la sessione non e' aperta: non lo dico e non lo mostro
         elenco.append({"progetto": messaggio.get("da"), "tipo": tipo,
                        "testo": (messaggio.get("oggetto") or "")[:280], "secondi": secondi,
                        # il corpo porta la domanda completa con le opzioni A/B/C
