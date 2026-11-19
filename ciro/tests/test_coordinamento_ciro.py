@@ -597,5 +597,49 @@ class TestRiepilogo(BaseCiro):
             modulo_cervello._esegui = prima
 
 
+class TestCodaAlRisveglio(BaseCiro):
+    """While Ciro sleeps notices pile up: on waking he says only what is still open."""
+
+    def test_domanda_gia_risposta_non_si_dice(self):
+        identificativo = self.chiedi()
+        self.giro()
+        posta.rispondi_domanda(identificativo, "A", None, "utente", "opencode")
+        with server._coda_lock:
+            voci = list(server._coda)
+        self.assertEqual(server.filtra_coda(voci), [])
+
+    def test_avviso_superato_non_si_dice(self):
+        vecchio = {"testo": "Da atlas: procedo?", "da": "avvisi", "chiave": "atlas|domanda|procedo?",
+                   "quando": time.time()}
+        self.assertEqual(server.filtra_coda([vecchio], attuali=set()), [])
+        self.assertEqual(server.filtra_coda([vecchio], attuali={"atlas|domanda|procedo?"}), [vecchio])
+
+    def test_messaggio_vecchio_scartato(self):
+        vecchio = {"testo": "Riepilogo: ripartito atlas.", "da": "riepilogo", "quando": time.time() - 3600}
+        nuovo = {"testo": "Ciao", "da": "opencode", "quando": time.time()}
+        self.assertEqual(server.filtra_coda([vecchio, nuovo], attuali=set()), [nuovo])
+
+    def test_tante_domande_una_frase_sola(self):
+        chiavi = set()
+        voci = []
+        for progetto in ("alpha", "beta", "gamma", "delta"):
+            chiave = "%s|domanda|x" % progetto
+            chiavi.add(chiave)
+            voci.append({"testo": "Da %s: x?" % progetto, "da": "avvisi", "chiave": chiave,
+                         "progetto": progetto, "quando": time.time()})
+        risultato = server.filtra_coda(voci, attuali=chiavi)
+        self.assertEqual(len(risultato), 1)
+        self.assertIn("4 domande", risultato[0]["testo"])
+        self.assertIn("alpha", risultato[0]["testo"])
+        # a short answer now must not go to a question Ciro never read aloud
+        self.assertEqual(server._cervello.ultimo_detto.get("tipo"), "avviso")
+
+    def test_tre_domande_si_dicono_tutte(self):
+        chiavi = {"a|domanda|x", "b|domanda|x", "c|domanda|x"}
+        voci = [{"testo": "Da %s: x?" % c[0], "da": "avvisi", "chiave": c, "progetto": c[0],
+                 "quando": time.time()} for c in sorted(chiavi)]
+        self.assertEqual(len(server.filtra_coda(voci, attuali=chiavi)), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
