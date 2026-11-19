@@ -666,5 +666,63 @@ class TestAvvisiSoloDomande(BaseCiro):
         self.assertIn("Procedo con il deploy di prova", detti[0])
 
 
+class TestPausaProgetti(BaseCiro):
+    """While projects are paused Ciro does not announce them (except the allowed ones)."""
+
+    def setUp(self):
+        super().setUp()
+        self.prima_impostazioni = modulo_cervello.IMPOSTAZIONI
+        modulo_cervello.IMPOSTAZIONI = self.tmp / "impostazioni.json"
+        server._in_pausa.clear()
+
+    def tearDown(self):
+        modulo_cervello.IMPOSTAZIONI = self.prima_impostazioni
+        super().tearDown()
+
+    def test_domanda_strutturata_in_pausa_non_si_dice(self):
+        server.imposta_pausa(True)
+        identificativo = self.chiedi("ironworks")
+        self.giro()
+        self.assertEqual(self.coda(), [])
+        self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")  # still on the panel
+        self.assertNotEqual((server._cervello.ultimo_detto or {}).get("id"), identificativo)
+
+    def test_progetto_permesso_si_dice(self):
+        server.imposta_pausa(True, ["prova-ciro"])
+        self.chiedi("ironworks")
+        self.chiedi("prova-ciro")
+        self.giro()
+        self.assertEqual([v["progetto"] for v in self.coda()], ["prova-ciro"])
+
+    def test_avviso_sessione_in_pausa_non_si_dice(self):
+        server.imposta_pausa(True)
+        modulo_cervello.leggi_sessioni = lambda: [{"progetto": "atlas", "aspetta_utente": True, "da_secondi": 3,
+                                                   "domanda": "Procedo? (S/N)", "attese_per_utente": []}]
+        server._visti = set()
+        server._ultimo_avviso.clear()
+        server.giro_avvisi()
+        self.assertEqual(self.coda(), [])
+
+    def test_alla_ripresa_una_frase(self):
+        server.imposta_pausa(True)
+        self.chiedi("ironworks")
+        self.chiedi("contoso")
+        self.giro()
+        server.imposta_pausa(False)
+        frase = server.frase_ripresa()
+        self.assertIn("2 domande", frase)
+        self.assertIn("ironworks", frase)
+        self.assertEqual(server.frase_ripresa(), "")
+
+    def test_comandi_a_voce(self):
+        esito = server._cervello.chiedi("pausa progetti tranne prova-ciro")
+        self.assertIn("pausa", esito["risposta"].lower())
+        impostazioni = modulo_cervello.leggi_impostazioni()
+        self.assertEqual((impostazioni["pausa_progetti"], impostazioni["solo_progetti"]), (True, ["prova-ciro"]))
+        esito = server._cervello.chiedi("riprendi i progetti")
+        self.assertFalse(modulo_cervello.leggi_impostazioni()["pausa_progetti"])
+        self.assertEqual(self.chiamate_modello, [])
+
+
 if __name__ == "__main__":
     unittest.main()
