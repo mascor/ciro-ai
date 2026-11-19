@@ -319,8 +319,12 @@ Riepiloghi (ogni 30 minuti, solo se ci sono novita'):
 # senza modello e senza altre conferme. Il registro delle domande e la posta
 # sono in posta-sessioni/scripts.
 AUTORIZZAZIONE_RE = re.compile(r"^\s*AUTORIZZAZIONE\s*:\s*(togli|elenca)\s*\|\s*(.+)$", re.IGNORECASE)
-LETTERA_RE = re.compile(r"^(?:(?:la|risposta|rispondi|scelgo|opzione|lettera)\s+)?([a-z])"
-                        r"(?:\s+(?:per|a|ad|al|alla)\s+(.+))?$")
+# «A», «la B», «ho detto A», «la risposta è B», «A grazie», «B per ironworks»
+LETTERA_RE = re.compile(r"^(?:(?:la|risposta|rispondi|rispondo|scelgo|opzione|lettera|ho detto|dico|"
+                        r"vai con|metti|e|è)\s+)*([a-z])"
+                        r"(?:\s+(?:per|a|ad|al|alla)\s+(.+?))?(?:\s+grazie)?$")
+# come whisper scrive a volte una lettera detta da sola
+LETTERE_SENTITE = {"ah": "a", "ha": "a", "à": "a", "bi": "b", "be": "b", "bè": "b", "ci": "c"}
 CORREZIONE_RE = re.compile(r"^(?:rispondi|cambia(?:\s+in)?|correggi(?:\s+in)?)\s+(?:la\s+)?([a-z])$")
 CORREZIONE_SECONDI = 120
 OPZIONI_DEPLOY_PROVA = {"A": "autorizza questa volta",
@@ -623,6 +627,7 @@ class Cervello:
         stato altro (un avviso, una proposta da confermare, un'altra domanda),
         Ciro chiede «Per quale progetto?» invece di indovinare."""
         detto = re.sub(r"[^\w'àèéìòù]+", " ", (testo or "").lower()).strip()
+        detto = LETTERE_SENTITE.get(detto, detto)
         if not detto:
             return None
         try:
@@ -1055,6 +1060,15 @@ class Cervello:
 
         if azione:
             casella = trova_casella(azione["a"])
+            strutturata = casella and azione["tipo"] == "decisione" and self._domanda_aperta_di(casella)
+            if strutturata:
+                # risposta a una domanda strutturata aperta: parte subito, senza «Confermi?»,
+                # solo se la lettera e' chiara (altrimenti Ciro la chiede)
+                self.domande_aperte.pop(casella, None)
+                self.azione_in_attesa = None
+                esito = self._invia(azione)
+                self.storico.append(("faccia", esito))
+                return {"risposta": esito, "azione": azione, "mandato": esito.startswith("Mandato")}
             if casella and azione["tipo"] == "decisione" and casella in self.domande_aperte:
                 # risposta a una domanda che Ciro gli ha appena riportato: parte subito
                 self.domande_aperte.pop(casella, None)
