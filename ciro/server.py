@@ -572,6 +572,11 @@ def attese(sessioni=None):
     for sessione in sessioni:
         if not sessione.get("aspetta_utente"):
             continue
+        # Ciro ha gia' mandato la tua risposta dopo che la sessione si e' fermata:
+        # non la ripropone mentre la sessione la legge (torna se chiede di nuovo)
+        ferma_dal = adesso_s - int(sessione.get("da_secondi") or 0)
+        if _cervello.decisioni_mandate.get(sessione.get("progetto"), 0) > ferma_dal:
+            continue
         testo = (sessione.get("domanda") or "").strip()
         a_voce = bool(testo)   # a voce solo le domande vere, non le righe di attesa
         if not testo:

@@ -44,5 +44,27 @@ class TestAtteseVecchie(BaseCiro):
         self.assertNotIn("server-agent", self.progetti_tra(5 * 60))
 
 
+class TestDomandaSessioneRisposta(BaseCiro):
+    """A session question leaves the list once Ciro has sent the answer (the real case:
+    answered twice by voice, still listed because the session had not moved yet)."""
+
+    def sessione_che_aspetta(self, da_secondi):
+        modulo_cervello.leggi_sessioni = lambda: [
+            {"progetto": "tools", "stato": "aspetta te", "aspetta_utente": True, "da_secondi": da_secondi,
+             "domanda": "Riscrivo la storia? (S/N)", "attese_per_utente": []}]
+
+    def test_risposta_mandata_toglie_la_domanda(self):
+        self.sessione_che_aspetta(60)
+        self.assertIn("tools", [v["progetto"] for v in server.attese()])
+        server._cervello.segna_decisione("tools")
+        self.assertNotIn("tools", [v["progetto"] for v in server.attese()])
+
+    def test_domanda_nuova_dopo_la_risposta_ricompare(self):
+        server._cervello.segna_decisione("tools")
+        server._cervello.decisioni_mandate["tools"] -= 120   # answered 2 minutes ago
+        self.sessione_che_aspetta(30)                         # the session asked again since
+        self.assertIn("tools", [v["progetto"] for v in server.attese()])
+
+
 if __name__ == "__main__":
     unittest.main()
