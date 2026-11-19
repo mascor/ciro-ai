@@ -547,6 +547,14 @@ async function inviaDiscorso(pezzi) {
     if (!risposta.ok) throw new Error("trascrizione fallita");
     const { testo } = await risposta.json();
     if (!testo || testo.trim().length < 2) {
+      // falso allarme: era rumore. La soglia sale al livello di quel rumore
+      // (e riscende da sola quando la stanza torna silenziosa)
+      let somma = 0;
+      for (const pezzo of pezzi) for (let i = 0; i < pezzo.length; i++) somma += pezzo[i] * pezzo[i];
+      const livello = Math.sqrt(somma / campioni);
+      const prima = rumore;
+      rumore = Math.min(0.012, Math.max(rumore, livello * 0.6));
+      if (rumore > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumore.toFixed(4));
       impostaFase("ascolto");
       return;
     }
@@ -766,6 +774,25 @@ function disegnaAttese(elenco) {
     const testo = document.createElement("p");
     testo.textContent = attesa.testo;
     riga.append(testa, testo);
+    // domanda strutturata: un pulsante per opzione, la risposta parte subito
+    const opzioni = Object.entries(attesa.opzioni || {});
+    if (attesa.domanda_id && opzioni.length) {
+      const pulsanti = document.createElement("div");
+      pulsanti.className = "opzioni";
+      for (const [lettera, spiegazione] of opzioni) {
+        const pulsante = document.createElement("button");
+        pulsante.type = "button";
+        pulsante.textContent = lettera;
+        pulsante.title = spiegazione;
+        pulsante.addEventListener("click", (evento) => {
+          evento.stopPropagation();
+          pulsanti.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+          chiediAlCervello(`${lettera} per ${attesa.progetto}`);
+        });
+        pulsanti.appendChild(pulsante);
+      }
+      riga.appendChild(pulsanti);
+    }
     // clic: apre la chat pronta per rispondere a quella sessione tramite Ciro
     riga.addEventListener("click", () => {
       chat.classList.add("aperta");

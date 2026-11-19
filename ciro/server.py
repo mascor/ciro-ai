@@ -157,7 +157,10 @@ def trascrivi(byte_audio):
             raise RuntimeError("whisper: " + " ".join(esito.stderr.split())[-400:])
         testo = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", testo)
         testo = " ".join(testo.split())
-        if any(frase in testo.lower() for frase in ALLUCINAZIONI):
+        # whisper "sente" queste frasi nel rumore; un "grazie" da solo non chiede
+        # comunque nulla a Ciro, quindi si scarta anche quello
+        if any(frase in testo.lower() for frase in ALLUCINAZIONI) or \
+                re.sub(r"[^a-z]", "", testo.lower()) in ("grazie", "grazieatutti", "grazieate"):
             log("scartata frase inventata da whisper: " + testo[:80])
             registra("ascolto-scartato", testo=testo, motivo="frase inventata da whisper")
             return ""

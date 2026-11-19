@@ -277,6 +277,22 @@ html, body {
   margin-left: -.6em;
   padding-left: calc(.6em - 3px);
 }
+/* pulsanti A/B/C sulle domande strutturate in "Ti aspettano" */
+#pannello-attese .opzioni { display: flex; gap: 8px; margin-top: 8px; }
+#pannello-attese .opzioni button {
+  min-width: 44px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(110, 231, 249, .45);
+  background: rgba(110, 231, 249, .12);
+  color: #e8eef5;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#pannello-attese .opzioni button:hover { background: rgba(110, 231, 249, .26); }
+#pannello-attese .opzioni button:disabled { opacity: .4; cursor: default; }
+
 /* chi aspetta te: sfondo ambra leggero e bordo che "respira"; il testo resta fermo e chiaro */
 #pannello-destra #pannello-sessioni li.attende {
   margin-left: -.6em;
