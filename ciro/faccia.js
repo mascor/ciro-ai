@@ -262,10 +262,15 @@ function riproduci(audio) {
     inizioVoceCiro = performance.now();
     eco = ecoCalibrata || 0;
     fotogrammiSopra = 0;
+    misuraSospeso = { massimo: 0, soglia: 0, sopra: 0 };
     sorgente = ctxUscita.createBufferSource();
     sorgente.buffer = audio;
     sorgente.connect(analizzatore);
     sorgente.onended = () => {
+      if (misuraSospeso.massimo > 0) {
+        evento("mic-mentre-parla", `max ${misuraSospeso.massimo.toFixed(4)} soglia ${misuraSospeso.soglia.toFixed(4)} ` +
+          `fotogrammi sopra ${misuraSospeso.sopra} eco ${eco.toFixed(3)} rumore ${rumore.toFixed(4)}`);
+      }
       sorgente = null;
       sospeso = false;
       livelloVoce = 0;
@@ -424,6 +429,12 @@ function esaminaMicrofono(dati) {
       return;
     }
     const sogliaInterruzione = Math.max(0.03, rumore * 8, eco * livelloVoce * 1.8);
+    // diagnosi: quanto forte arriva il microfono mentre Ciro parla
+    if (rms > misuraSospeso.massimo) {
+      misuraSospeso.massimo = rms;
+      misuraSospeso.soglia = sogliaInterruzione;
+    }
+    misuraSospeso.sopra = Math.max(misuraSospeso.sopra, rms > sogliaInterruzione ? fotogrammiSopra + 1 : 0);
     fotogrammiSopra = rms > sogliaInterruzione ? fotogrammiSopra + 1 : 0;
     if (fotogrammiSopra >= 3) interrompiCiro(adesso); // circa 0,4 s di voce tua
     return;
@@ -491,10 +502,13 @@ function esaminaMicrofono(dati) {
 // Lo interrompi: smette subito di parlare, butta le frasi in coda e ascolta.
 let eco = 0;
 let fotogrammiSopra = 0;
+let misuraSospeso = { massimo: 0, soglia: 0, sopra: 0 };
+let interrottoAlle = 0;   // la prossima frase arriva subito dopo un'interruzione
 let inizioVoceCiro = 0;
 
 function interrompiCiro(adesso) {
   evento("interruzione", "eco " + eco.toFixed(3) + ", frasi scartate " + coda.length);
+  interrottoAlle = adesso;
   fotogrammiSopra = 0;
   coda.length = 0;
   if (sorgente) {
@@ -594,7 +608,8 @@ async function chiediAlCervello(testo, livello, pause) {
     const risposta = await fetch("/api/cervello", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ testo, livello: livello || null, pause: pause || [] }),
+      body: JSON.stringify({ testo, livello: livello || null, pause: pause || [],
+                             interrotto: performance.now() - interrottoAlle < 15000 }),
     });
     if (!risposta.ok) throw new Error("cervello non disponibile");
     const dato = await risposta.json();

@@ -291,6 +291,16 @@ def pulisci_trascrizione(testo):
 VERSI = {"e", "eh", "ehm", "em", "uhm", "um", "uh", "mm", "mmh", "mmm", "hm", "hmm", "ehh"}
 
 
+# dopo un'interruzione «Ciro, fermati» vuol dire solo: stai zitto (whisper a volte
+# scrive «Spero fermati»: fino a due parole prima della parola di stop)
+STOP_RE = re.compile(r"^\W*(?:[\w']+\W+){0,2}?(?:fermati|fermo|basta|zitto|stai zitto|taci|silenzio|"
+                     r"aspetta|stop|wait|quiet|be quiet|enough|shut up)\W*$", re.I)
+
+
+def solo_stop(testo):
+    return bool(STOP_RE.match(testo or ""))
+
+
 def solo_verso(testo):
     return re.sub(r"[^a-z]", "", (testo or "").lower()) in VERSI
 
@@ -1366,6 +1376,10 @@ class Gestore(BaseHTTPRequestHandler):
                 testo = (dato.get("testo") or "").strip()
                 if not testo:
                     self._errore(400, "testo vuoto")
+                    return
+                if dato.get("interrotto") and solo_stop(testo):
+                    registra("stop-dopo-interruzione", testo=testo)
+                    self._invia(200, json.dumps({"risposta": ""}))
                     return
                 with _cervello_lock:
                     _cervello.ultimo_livello = dato.get("livello")
