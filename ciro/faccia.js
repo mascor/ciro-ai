@@ -548,7 +548,7 @@ async function inviaDiscorso(pezzi) {
     });
     if (!risposta.ok) throw new Error("trascrizione fallita");
     const { testo } = await risposta.json();
-    if (!testo || testo.trim().length < 2) {
+    if (!testo || !testo.trim()) { // anche una lettera sola («a») e' una risposta
       // falso allarme: era rumore. La soglia sale al livello di quel rumore
       // (e riscende da sola quando la stanza torna silenziosa)
       let somma = 0;
