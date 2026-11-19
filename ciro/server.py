@@ -1127,6 +1127,7 @@ def quadro():
     sessioni = modulo_cervello.leggi_sessioni() or []
     return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni),
             "pausa": stato_pausa(), "collaudo": _collaudo.fase, "guida": _collaudo.stato_guida(),
+            "calibrato": bool(modulo_cervello.leggi_impostazioni().get("calibrato")),
             "microfono": {"soglia": modulo_cervello.leggi_impostazioni().get("soglia_microfono"),
                           "fine_frase_ms": modulo_cervello.profilo_voce().get("fine_frase_ms"),
                           "eco": modulo_cervello.profilo_voce().get("eco")}}

@@ -215,6 +215,7 @@ class Collaudo:
         else:
             soglia = round(max(0.008, 3 * rumore), 4)
         modulo_cervello.imposta("soglia_microfono", soglia)
+        modulo_cervello.imposta("calibrato", True)   # la prima volta parte da sola, poi mai piu'
         self.rumore["soglia"] = soglia
         self.rumore["voce"] = voce
         profilo = {}
@@ -222,6 +223,8 @@ class Collaudo:
             ordinate = sorted(self.pause)
             p90 = ordinate[min(len(ordinate) - 1, int(len(ordinate) * 0.9))]
             profilo["fine_frase_ms"] = max(600, min(1200, p90 + 250))
+        elif not self.pause and len(self.frasi_sentite) >= 4:
+            profilo["fine_frase_ms"] = 700   # parla senza pause: si puo' aspettare meno
         if self.rumore.get("eco"):
             profilo["eco"] = self.rumore["eco"]
         if profilo:

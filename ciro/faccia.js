@@ -693,7 +693,21 @@ function spegniMicrofono() {
 bottoneAvvio.addEventListener("click", async () => {
   avvio.classList.remove("visibile");
   await ctxUscita.resume();
-  accendi();
+  // la prima volta che un utente usa Ciro parte la calibrazione (come la
+  // configurazione di Siri); se la interrompe, riparte alla prossima sessione
+  let primaVolta = false;
+  try {
+    const quadro = await (await fetch("/api/quadro", { cache: "no-store" })).json();
+    primaVolta = !quadro.calibrato && !sessionStorage.getItem("ciro-prima-calibrazione");
+  } catch (errore) { /* senza quadro si parte normalmente */ }
+  if (!primaVolta) {
+    accendi();
+    return;
+  }
+  try { sessionStorage.setItem("ciro-prima-calibrazione", "1"); } catch (errore) { /* pazienza */ }
+  accendi(false);
+  di("È la prima volta che ci sentiamo: ti guido in una calibrazione di cinquanta secondi.");
+  avviaCalibrazione();
 });
 
 // ------------------------------------------- aggiornamento automatico
@@ -1184,7 +1198,9 @@ async function azioneGuida(azione) {
 document.getElementById("guida-ripeti").addEventListener("click", () => azioneGuida("ripeti"));
 document.getElementById("guida-ferma").addEventListener("click", () => azioneGuida("ferma"));
 document.getElementById("guida-chiudi").addEventListener("click", () => azioneGuida("chiudi"));
-document.getElementById("calibra").addEventListener("click", async () => {
+document.getElementById("calibra").addEventListener("click", () => avviaCalibrazione());
+
+async function avviaCalibrazione() {
   if (!sveglia) accendi(false); // per misurare serve il microfono acceso
   try {
     const risposta = await fetch("/api/collaudo", {
@@ -1198,7 +1214,7 @@ document.getElementById("calibra").addEventListener("click", async () => {
     eseguiComando(dato);
   } catch (errore) { /* riprovo al prossimo clic */ }
   aggiornaQuadro();
-});
+}
 
 // ------------------------------------------- calibrazione guidata
 // «Ciro, calibrati»: il server chiede di misurare il silenzio dopo aver parlato.

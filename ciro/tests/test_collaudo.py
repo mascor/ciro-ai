@@ -83,6 +83,8 @@ class TestCalibrazione(BaseCollaudo):
         self.assertEqual(self.c.fase, "fine")
         self.assertTrue(self.detti[-1].startswith("Calibrazione finita"), self.detti)
         self.assertIn("6 frasi su 6", self.detti[-1])
+        # first use is over: the calibration will not start by itself again
+        self.assertTrue(modulo_cervello.leggi_impostazioni()["calibrato"])
         # threshold between the room noise (2.5 x p95) and the voice (0.35 x median)
         # threshold between the mean room noise and the voice: sqrt(0.002 x 0.08)
         self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.0126)
@@ -134,6 +136,14 @@ class TestCalibrazione(BaseCollaudo):
         # end of speech: 90th percentile of the pauses (500) + 250 ms, between 600 and 1200
         self.assertEqual(profilo["fine_frase_ms"], 750)
         self.assertEqual(self.c.chiamata_dopo, 1)
+
+    def test_senza_pause_fine_frase_piu_corta(self):
+        # fluent speech (19/11, real): no pause inside the phrases -> 700 ms instead of 900
+        self.c.avvia("calibrazione")
+        self.c.silenzio(0.0004, 0.001, 0.0013)
+        for detta in ("uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"):
+            self.c.gestisci(detta, 0.07, [])
+        self.assertEqual(modulo_cervello.profilo_voce()["fine_frase_ms"], 700)
 
     def test_ripeti_e_ferma(self):
         self.c.avvia("calibrazione")
