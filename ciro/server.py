@@ -1097,7 +1097,7 @@ def giro_domande():
 # numerate (solo registro, niente posta), aspetta la risposta dell'utente e la
 # restituisce alla sessione. Se Ciro e' spento, zitto o in pausa, o se l'utente
 # non risponde in tempo, risposta vuota: la sessione chiede nel terminale.
-ATTESA_HOOK = 40          # secondi; il timeout dell'hook in settings.json e' 45
+ATTESA_HOOK = 60          # secondi; il timeout dell'hook in settings.json e' 75
 PAGINA_SVEGLIA = 15       # la pagina sveglia chiede i messaggi ogni pochi secondi
 _pagina = {"sveglia": 0.0}
 
@@ -1175,7 +1175,7 @@ def gestisci_hook(dato, attesa=None, adesso=time.time):
     if pronta is None:
         return None
     progetto, oggetto, testo, opzioni, operazione, risposta = pronta
-    if in_pausa(modulo_posta.slug(progetto, 60)):
+    if in_pausa(progetto):
         return None
     try:
         identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione)
@@ -1183,8 +1183,8 @@ def gestisci_hook(dato, attesa=None, adesso=time.time):
         registra("errore-hook", errore=repr(errore)[:300])
         return None
     registra("hook", evento=dato.get("hook_event_name"), domanda_id=identificativo)
-    if attesa is None:   # impostabile: «attesa_hook» in impostazioni.json (secondi, al massimo 44)
-        attesa = min(44, max(5, int(modulo_cervello.leggi_impostazioni().get("attesa_hook") or ATTESA_HOOK)))
+    if attesa is None:   # impostabile: «attesa_hook» in impostazioni.json (secondi, al massimo 70)
+        attesa = min(70, max(5, int(modulo_cervello.leggi_impostazioni().get("attesa_hook") or ATTESA_HOOK)))
     fine = adesso() + attesa
     while True:
         scheda = domande.leggi(identificativo)

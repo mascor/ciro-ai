@@ -23,7 +23,7 @@ from pathlib import Path
 IMPOSTAZIONI = Path.home() / ".claude" / "settings.json"
 INDIRIZZO = "http://127.0.0.1:8765/hooks/claude"
 SEGNO = "/hooks/claude"        # how Ciro's hooks are recognised
-TIMEOUT = 45                   # seconds; Ciro waits for the user at most 40
+TIMEOUT = 75                   # seconds; Ciro waits for the user 60 (at most 70)
 EVENTI = {"PermissionRequest": None, "PreToolUse": "AskUserQuestion"}   # event -> matcher
 
 

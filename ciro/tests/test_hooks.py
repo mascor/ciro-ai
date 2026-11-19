@@ -116,6 +116,27 @@ class TestHook(BaseCiro):
             server.imposta_pausa(False)
         self.assertEqual(domande.elenca(), [])
 
+    def test_risposta_del_modello_con_il_nome_della_casella(self):
+        # 19/11/2026: «Ho detto sì, consenti» passato dal modello, con a=OPENCODE-SKILLS
+        dato = dict(PERMESSO, cwd="/Users/x/Documents/OPENCODE-SKILLS")
+        filo, esito = self.in_corso(dato)
+        self.assertEqual(domande.elenca()[0]["progetto"], "OPENCODE-SKILLS")   # case kept
+        prima = modulo_cervello._esegui
+        modulo_cervello._esegui = lambda comando, timeout: (
+            "AZIONE: invia | a=OPENCODE-SKILLS | tipo=decisione | oggetto=x | testo=Sì, consenti", "", 0) \
+            if comando and comando[0] == "opencode" else prima(comando, timeout)
+        modulo_cervello.leggi_sessioni = lambda: [{"progetto": "OPENCODE-SKILLS", "stato": "al lavoro",
+                                                    "aspetta_utente": False, "da_secondi": 0}]
+        try:
+            self.c.ultimo_detto = {"tipo": "avviso", "id": "altro", "ora": 0}   # not right after the question
+            esito_voce = self.c.chiedi("Ho detto sì, consenti.")
+        finally:
+            modulo_cervello._esegui = prima
+        self.assertTrue(esito_voce["mandato"], esito_voce)
+        filo.join(5)
+        self.assertEqual(esito["uscita"]["hookSpecificOutput"]["decision"], {"behavior": "allow"})
+        self.assertEqual(self.messaggi_a("OPENCODE-SKILLS"), [])
+
     def test_riassunti(self):
         self.assertEqual(server.riassunto_permesso("Edit", {"file_path": "/a/b/app.py"}),
                          "vuole modificare il file app.py")

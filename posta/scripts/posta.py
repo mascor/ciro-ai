@@ -1440,7 +1440,8 @@ def chiedi_da_hook(progetto, oggetto, domanda, opzioni, operazione="permesso", t
     The hook waits for the answer in the registry and gives it back to the session
     itself, so nothing goes to the manager or to the session's mailbox. Returns the ID.
     """
-    progetto = valida_casella(slug(progetto, 60))
+    # the mailbox name as the sessions use it (case kept: OPENCODE-SKILLS, not opencode-skills)
+    progetto = valida_casella(re.sub(r"[^A-Za-z0-9_-]+", "-", str(progetto or "")).strip("-")[:60] or "sessione")
     if operazione not in OPERAZIONI:
         raise ErrorePosta("operazione non valida: %r" % (operazione,))
     if not _una_riga(domanda) or not opzioni:

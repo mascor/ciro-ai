@@ -33,7 +33,7 @@ OpenCode 2.3.2: plugin event `permission.asked`, reply through `POST /permission
 
 ### Flow (Claude Code)
 
-1. Claude Code POSTs the hook input to `http://127.0.0.1:8765/hooks/claude` (timeout 45 s).
+1. Claude Code POSTs the hook input to `http://127.0.0.1:8765/hooks/claude` (timeout 75 s).
 2. Ciro answers at once with an empty 200 (= "ask in the terminal as usual") when:
    Ciro is off or muted, the projects are paused for that project, the hook is not one we
    handle, or the question is not a single single-select question.
@@ -50,7 +50,7 @@ OpenCode 2.3.2: plugin event `permission.asked`, reply through `POST /permission
    answers only to questions said aloud, the letter from the user's words).
    Permissions are never answered by saved preferences or authorisations: only the user.
 5. The HTTP handler waits for the record to reach `risposta-consegnata` (polling the
-   registry, up to 40 s, a setting) and returns allow/deny (or the chosen labels). On
+   registry, up to 60 s, setting attesa_hook) and returns allow/deny (or the chosen labels). On
    time-out it closes the record as `annullata` («passata al terminale») and returns an
    empty 200: the terminal prompt appears, nothing is lost.
 6. The record is then marked `recepita` and `risolta` by Ciro itself.
