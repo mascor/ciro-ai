@@ -55,7 +55,7 @@ def e_conferma(detto):
             and any(p in PAROLE_FORTI for p in parole))
 
 
-NO_RE = re.compile(r"^(no|annulla|lascia stare|non mandarlo|ferma|aspetta)\b")
+NO_RE = re.compile(r"^(no|annulla|lascia stare|non mandarlo|ferma|aspetta|cancel|don't|do not|stop|wait)\b")
 
 
 # ----------------------------------------------------------- modello
@@ -279,7 +279,7 @@ La tua risposta viene letta ad alta voce: italiano, niente elenchi, markdown o s
 
 Come parli:
 - Una frase, al massimo due, brevi. Niente premesse, niente "prego", niente ripetere cio' che ha detto lui, niente quadro completo se non lo chiede.
-- Se serve una sua scelta, una sola domanda: si' o no, oppure A, B o C con le opzioni in poche parole ("A, ...; B, ...").
+- Se serve una sua scelta, una sola domanda: si' o no, oppure uno, due o tre con le opzioni in poche parole ("uno, ...; due, ...").
 - Se ti ringrazia o ti saluta soltanto, rispondi con al massimo due parole.
 
 Cosa fai:
@@ -295,7 +295,7 @@ Mandare messaggi:
 - Il destinatario e' il nome del progetto, non quello della sessione. Se ti chiede solo cosa succede, niente riga AZIONE.
 - Se ci sono piu' domande aperte di sessioni diverse, capisci dalla sua risposta a quale sessione si riferisce (nomina il progetto); se non e' chiaro, chiediglielo prima di scrivere la riga AZIONE.
 - Con una riga AZIONE non fare altre domande nella stessa risposta, e non dire "fatto" o "mandato": lo dice il sistema.
-- Se risponde a una domanda che gli hai detto con le opzioni (A, B... oppure S/N), aggiungi alla riga AZIONE "| scelta=<lettera>" e metti nel testo la sua nota.
+- Se risponde a una domanda che gli hai detto con le opzioni (uno = A, due = B, tre = C, oppure si'/no = S/N), aggiungi alla riga AZIONE "| scelta=<lettera>" e metti nel testo la sua nota.
 
 Regole generali:
 - Non decidere mai al posto suo. Non inventare stati o messaggi che non sono nel quadro.
@@ -316,6 +316,59 @@ Riepiloghi (ogni 30 minuti, solo se ci sono novita'):
 - Se non li vuole piu', aggiungi in fondo: IMPOSTA: riepilogo | 0"""
 
 
+ISTRUZIONI_EN = """You are Ciro, the user's voice assistant: a male character with glasses who lives in a page on their Mac.
+Your answer is read aloud: English, no lists, markdown or symbols.
+
+How you speak:
+- One sentence, two at most, short. No preambles, no "you're welcome", don't repeat what the user said, no full overview unless asked.
+- If you need a choice, one question only: yes or no, or one, two or three with the options in a few words ("one, ...; two, ...").
+- If the user only thanks or greets you, answer with two words at most.
+
+What you do:
+- You tell the user about the Claude Code sessions and the mail, and pass their messages and decisions to the sessions.
+- Updates arrive by themselves: when a session waits for the user or asks for a decision, the page makes you say it at once (you find them in the conversation as your lines starting with "From" or "Da"). Never say you cannot give updates.
+- When you report a session's question, report it faithfully and ask how to answer.
+
+Sending messages (keep these protocol words exactly as written, they are read by a program):
+- Line to add at the end, exactly like this:
+  AZIONE: invia | a=<project name> | tipo=<richiesta|decisione> | oggetto=<a few words> | testo=<the text to send>
+- If the user answers a session's question you have just reported, write the AZIONE line at once with tipo=decisione and their faithful answer: it is sent without further confirmation.
+- For any other message, write the AZIONE line: the system asks the user to confirm before sending it. Never say you have already sent it.
+- The recipient is the project name, not the session name. If the user only asks what is happening, no AZIONE line.
+- If several questions from different sessions are open, understand from the answer which session it refers to (name the project); if it is not clear, ask before writing the AZIONE line.
+- With an AZIONE line do not ask other questions in the same answer, and do not say "done" or "sent": the system says it.
+- If the user answers a question you read with options (one = A, two = B, three = C, or yes/no = S/N), add "| scelta=<letter>" to the AZIONE line and put their note in the text.
+
+General rules:
+- Never decide in the user's place. Do not invent states or messages that are not in the picture.
+- The true state of your voice is the one in "Your voice" below: ignore old mail saying otherwise.
+- Always follow the "Saved rules".
+- If the user gives you a rule valid from now on ("from now on", "remember that", "never again"), say "Noted" and add at the end:
+  MEMORIA: aggiungi | <the rule in one clear sentence>
+- If the user asks you to remove a saved rule, add at the end: MEMORIA: togli | <rule number>
+- Do not save as rules requests of the moment or session states.
+
+Authorisations (test deploys that start by themselves after the tests):
+- If the user tells you to always ask before publishing a project, add at the end: AUTORIZZAZIONE: togli | <project>
+- If the user asks what you can do by yourself on a project, add at the end: AUTORIZZAZIONE: elenca | <project>
+- New authorisations come only from a test-deploy question (option two): promise nothing else.
+
+Summaries (every 30 minutes, only when something happened):
+- If the user asks to change their frequency, add at the end: IMPOSTA: riepilogo | <minutes>
+- If the user does not want them any more, add at the end: IMPOSTA: riepilogo | 0"""
+
+PROMPT_PER_VOCE_EN = """Turn this request from a session into one sentence to say aloud to the user, in English.
+Format: the question in one short sentence, then the options as "one, ...; two, ...; three, ..." with at most eight words each.
+No context, no file names, paths, IDs or links. 60 words at most. Write only the sentence.
+
+Request:
+"""
+PROMPT_COMPATTA_EN = """You keep the memory of Ciro, the user's voice assistant.
+Merge the existing summary and the lines below into one new summary, in English, at most 15 short lines.
+Keep: decisions taken, requests still open, what was sent and to which session, preferences or information the user gave, topics in progress.
+Drop greetings, repetitions, old session states and small talk. Write only the summary, no titles."""
+
+
 # ------------------------------------------------- domande strutturate
 # Le risposte a voce («A», «la B», «B per ironworks», «sì») partono subito,
 # senza modello e senza altre conferme. Il registro delle domande e la posta
@@ -323,23 +376,31 @@ Riepiloghi (ogni 30 minuti, solo se ci sono novita'):
 AUTORIZZAZIONE_RE = re.compile(r"^\s*AUTORIZZAZIONE\s*:\s*(togli|elenca)\s*\|\s*(.+)$", re.IGNORECASE)
 # «A», «la B», «ho detto A», «la risposta è B», «A grazie», «B per ironworks»
 LETTERA_RE = re.compile(r"^(?:(?:la|risposta|rispondi|rispondo|scelgo|opzione|lettera|ho detto|dico|"
-                        r"vai con|metti|e|è)\s+)*([a-z])"
-                        r"(?:\s+(?:per|a|ad|al|alla)\s+(.+?))?(?:\s+grazie)?$")
+                        r"vai con|metti|e|è|the|answer|option|number|letter|i said|say|choose|go with|"
+                        r"it's|it is)\s+)*([a-z])"
+                        r"(?:\s+(?:per|a|ad|al|alla|for)\s+(.+?))?(?:\s+(?:grazie|thanks|thank you|please))?$")
 # A voce le opzioni si chiamano con numeri: in italiano le lettere si confondono
 # (bi, ci, di, gi, pi, vi suonano quasi uguali; misurato sulla voce vera il 19/11)
 NOMI_OPZIONE = {"A": "uno", "B": "due", "C": "tre", "D": "quattro", "E": "cinque", "S": "sì", "N": "no"}
+NOMI_OPZIONE_EN = {"A": "one", "B": "two", "C": "three", "D": "four", "E": "five", "S": "yes", "N": "no"}
 NUMERI_RISPOSTA = {"uno": "a", "1": "a", "prima": "a", "primo": "a",
                    "due": "b", "2": "b", "seconda": "b", "secondo": "b",
                    "tre": "c", "3": "c", "terza": "c", "terzo": "c",
                    "quattro": "d", "4": "d", "quarta": "d", "quarto": "d",
-                   "cinque": "e", "5": "e", "quinta": "e", "quinto": "e"}
-PAROLE_PRIMA = {"la", "il", "risposta", "rispondi", "rispondo", "scelgo", "opzione", "numero", "lettera",
+                   "cinque": "e", "5": "e", "quinta": "e", "quinto": "e",
+                   # English
+                   "one": "a", "first": "a", "two": "b", "to": "b", "too": "b", "second": "b",
+                   "three": "c", "third": "c", "four": "d", "for": "d", "fourth": "d",
+                   "five": "e", "fifth": "e"}
+PAROLE_PRIMA = {"the", "answer", "option", "number", "letter", "i", "said", "say", "choose", "go", "with",
+                "change", "it's", "its", "is",
+                "la", "il", "risposta", "rispondi", "rispondo", "scelgo", "opzione", "numero", "lettera",
                 "ho", "detto", "dico", "vai", "con", "metti", "e", "è", "cambia", "correggi", "in"}
 LETTERE_AMBIGUE = set("BCDE")   # dette come lettere si scambiano tra loro
 
 
 def nome_opzione(lettera):
-    return NOMI_OPZIONE.get(lettera, lettera)
+    return per_lingua(NOMI_OPZIONE, NOMI_OPZIONE_EN).get(lettera, lettera)
 
 
 def elenco_opzioni(opzioni):
@@ -364,7 +425,8 @@ def numeri_in_lettere(detto):
 # come whisper scrive a volte una lettera detta da sola
 LETTERE_SENTITE = {"ah": "a", "ahh": "a", "aah": "a", "ha": "a", "à": "a",
                    "bi": "b", "be": "b", "bè": "b", "ci": "c"}
-CORREZIONE_RE = re.compile(r"^(?:rispondi|cambia(?:\s+in)?|correggi(?:\s+in)?)\s+(?:la\s+)?([a-z])$")
+CORREZIONE_RE = re.compile(r"^(?:rispondi|cambia(?:\s+in)?|correggi(?:\s+in)?|answer|change(?:\s+it)?\s+to|"
+                           r"correct(?:\s+it)?\s+to)\s+(?:la\s+|the\s+)?([a-z])$")
 CORREZIONE_SECONDI = 120
 OPZIONI_DEPLOY_PROVA = {"A": "autorizza questa volta",
                         "B": "autorizza sempre su questo progetto dopo i test",
@@ -398,20 +460,27 @@ IMPOSTAZIONI = Path(os.environ.get("FACCIA_IMPOSTAZIONI") or (Path.home() / ".co
 IMPOSTAZIONI_PREDEFINITE = {"riepilogo": 30,          # minuti; 0 = spento
                             "pausa_progetti": False,  # niente annunci delle sessioni...
                             "solo_progetti": []}      # ...tranne questi
-PAUSA_RE = re.compile(r"^(?:metti in |metti |attiva la )?pausa (?:ai |i |sui |dei )?progetti(?: tranne (.+))?$")
-RIPRESA_RE = re.compile(r"^(?:riprendi|riattiva|togli la pausa)(?: (?:ai |i |dei )?progetti)?$")
+PAUSA_RE = re.compile(r"^(?:(?:metti in |metti |attiva la )?pausa (?:ai |i |sui |dei )?progetti(?: tranne (.+))?"
+                      r"|(?:pause|mute) (?:the )?projects(?: except (.+))?)$")
+RIPRESA_RE = re.compile(r"^(?:(?:riprendi|riattiva|togli la pausa)(?: (?:ai |i |dei )?progetti)?"
+                        r"|(?:resume|unpause|restart) (?:the )?projects)$")
 IMPOSTA_RE = re.compile(r"^\s*IMPOSTA\s*:\s*(riepilogo)\s*\|\s*(\d{1,4})", re.IGNORECASE)
 
 
+def chiave_lingua(nome):
+    """Le impostazioni che dipendono dalla lingua: profilo_voce, profilo_voce_en..."""
+    return nome if lingua() == "it" else "%s_%s" % (nome, lingua())
+
+
 def profilo_voce():
-    """Il profilo della voce dell'utente (docs/voice-profile-design.md)."""
-    return dict(leggi_impostazioni().get("profilo_voce") or {})
+    """Il profilo della voce dell'utente nella lingua attuale (docs/voice-profile-design.md)."""
+    return dict(leggi_impostazioni().get(chiave_lingua("profilo_voce")) or {})
 
 
 def aggiorna_profilo(**campi):
     profilo = profilo_voce()
     profilo.update(campi)
-    imposta("profilo_voce", profilo)
+    imposta(chiave_lingua("profilo_voce"), profilo)
     return profilo
 
 
@@ -465,7 +534,7 @@ def stato_voce():
 
 
 PROMPT_PER_VOCE = """Trasforma questa richiesta di una sessione in una frase da dire a voce all'utente.
-Formato: la domanda in una frase breve, poi le opzioni come "A, ...; B, ...; C, ..." con al massimo otto parole ciascuna.
+Formato: la domanda in una frase breve, poi le opzioni come "uno, ...; due, ...; tre, ..." con al massimo otto parole ciascuna.
 Niente contesto, niente nomi di file, percorsi, ID o link. Massimo 60 parole. Scrivi solo la frase.
 
 Richiesta:
@@ -475,7 +544,7 @@ Richiesta:
 def domanda_per_voce(testo):
     """Versione parlabile e breve di una domanda lunga (vuota se il modello non risponde)."""
     try:
-        uscita, _, codice = chiedi_modello(PROMPT_PER_VOCE + testo[:3000], 60)
+        uscita, _, codice = chiedi_modello(per_lingua(PROMPT_PER_VOCE, PROMPT_PER_VOCE_EN) + testo[:3000], 60)
     except Exception:  # noqa: BLE001
         return ""
     if codice != 0:
@@ -634,7 +703,7 @@ class Cervello:
         return {"risposta": risposta, "azione": None, "mandato": mandato}
 
     def _correggi(self, testo, detto):
-        annulla = detto == "annulla" or detto.startswith("annulla ")
+        annulla = detto in ("annulla", "cancel", "cancel it") or detto.startswith("annulla ")
         cambio = CORREZIONE_RE.match(detto)
         if not annulla and not cambio:
             return None
@@ -721,7 +790,7 @@ class Cervello:
         # «B» su un deploy di prova: la regola si salva solo dopo il suo «sì»
         if self.autorizzazione_in_attesa:
             scheda = self.autorizzazione_in_attesa
-            if detto in ("si", "sì") or e_conferma(detto):
+            if detto in ("si", "sì", "yes") or e_conferma(detto):
                 self.autorizzazione_in_attesa = None
                 try:
                     regola = coordinatore.salva_autorizzazione(
@@ -743,14 +812,14 @@ class Cervello:
         if self.conferma_lettera:
             scheda, lettera_ambigua, sentito_prima = self.conferma_lettera
             self.conferma_lettera = None
-            if detto in ("si", "sì") or e_conferma(detto):
+            if detto in ("si", "sì", "yes") or e_conferma(detto):
                 return self._manda(scheda, lettera_ambigua, testo, sentito=sentito_prima)
             if NO_RE.match(detto):
                 return self._detto(testo, t("Va bene. Dimmi il numero: %s.") % elenco_opzioni(
                     opzioni_per_voce(scheda)), False)
 
         # un messaggio libero aspetta conferma: «sì», «no», «annulla» sono per lui
-        if self.azione_in_attesa and (detto in ("si", "sì", "no") or e_conferma(detto) or NO_RE.match(detto)):
+        if self.azione_in_attesa and (detto in ("si", "sì", "no", "yes") or e_conferma(detto) or NO_RE.match(detto)):
             return None
 
         # «annulla» o «rispondi B» subito dopo una risposta: e' una correzione
@@ -769,7 +838,7 @@ class Cervello:
         trovata = LETTERA_RE.match(detto)
         if trovata:
             lettera, progetto = trovata.group(1).upper(), trovata.group(2)
-        elif detto in ("si", "sì", "no"):
+        elif detto in ("si", "sì", "no", "yes"):
             lettera = "no" if detto == "no" else "si"
         if lettera is None:
             lettera = self._lettera_da_parole(detto_parole)   # «procedi» al posto di «A»
@@ -820,7 +889,7 @@ class Cervello:
         pausa = PAUSA_RE.match(detto)
         if pausa:
             permessi = []
-            for nome in re.split(r",| e ", pausa.group(1) or ""):
+            for nome in re.split(r",| e | and ", pausa.group(1) or pausa.group(2) or ""):
                 nome = nome.strip()
                 if nome:
                     permessi.append(trova_casella(nome) or nome)
@@ -974,7 +1043,8 @@ class Cervello:
         threading.Thread(target=self._compatta, args=(vecchie, riassunto), daemon=True).start()
 
     def _compatta(self, vecchie, riassunto):
-        testo = [PROMPT_COMPATTA, "", "Riassunto esistente:", riassunto or "(vuoto)", "", "Battute:"]
+        testo = [per_lingua(PROMPT_COMPATTA, PROMPT_COMPATTA_EN), "", "Riassunto esistente:", riassunto or "(vuoto)", "",
+                 "Battute:"]
         testo += ["%s: %s" % (NOME_UTENTE if c == "io" else "Ciro", t) for c, t in vecchie]
         nuovo = ""
         try:
@@ -995,30 +1065,37 @@ class Cervello:
 
     # ---------------------------------------------------------------- interno
     def _prompt(self, testo):
-        parti = [ISTRUZIONI, ""]
+        en = lingua() == "en"
+        parti = [ISTRUZIONI_EN if en else ISTRUZIONI, ""]
         if NOME_UTENTE != "Utente":
-            parti += ["L'utente si chiama %s." % NOME_UTENTE, ""]
-        parti += ["La tua voce: %s" % stato_voce(), ""]
-        parti += ["Regole salvate:", quadro_regole(), ""]
-        parti += ["Sessioni Claude Code aperte:", quadro_sessioni(), ""]
-        parti += ["Posta in arrivo (casella opencode):", posta_recente(), ""]
+            parti += [("The user's name is %s." if en else "L'utente si chiama %s.") % NOME_UTENTE, ""]
+        parti += [("Your voice: %s" if en else "La tua voce: %s") % stato_voce(), ""]
+        parti += ["Saved rules:" if en else "Regole salvate:", quadro_regole(), ""]
+        parti += ["Open Claude Code sessions:" if en else "Sessioni Claude Code aperte:", quadro_sessioni(), ""]
+        parti += ["Incoming mail (opencode mailbox):" if en else "Posta in arrivo (casella opencode):",
+                  posta_recente(), ""]
         if self.azione_in_attesa:
             parti += [
-                "Azione proposta e non ancora confermata: %s" % self.azione_in_attesa["descrizione"],
+                ("Action proposed and not yet confirmed: %s" if en else
+                 "Azione proposta e non ancora confermata: %s") % self.azione_in_attesa["descrizione"],
+                "If the user says yes, answer that you send it and repeat the AZIONE line." if en else
                 "Se l'utente dice si, rispondi che la mandi e ripeti la riga AZIONE.",
                 "",
             ]
         if self.riassunto:
-            parti += ["Riassunto delle conversazioni precedenti con l'utente:", self.riassunto, ""]
+            parti += ["Summary of earlier conversations with the user:" if en else
+                      "Riassunto delle conversazioni precedenti con l'utente:", self.riassunto, ""]
+        utente = "User" if en else "Utente"
         if self.storico:
-            intestazione = "Conversazione fin qui"
+            intestazione = "Conversation so far" if en else "Conversazione fin qui"
             if self.ultima:
-                intestazione += " (ultima battuta: %s; adesso: %s)" % (self.ultima, time.strftime("%d/%m %H:%M"))
+                intestazione += (" (last line: %s; now: %s)" if en else " (ultima battuta: %s; adesso: %s)") % (
+                    self.ultima, time.strftime("%d/%m %H:%M"))
             parti.append(intestazione + ":")
             for chi, frase in self.storico[-BATTUTE_NEL_PROMPT:]:
-                parti.append("%s: %s" % ("Utente" if chi == "io" else "Ciro", frase))
+                parti.append("%s: %s" % (utente if chi == "io" else "Ciro", frase))
             parti.append("")
-        parti.append("Utente: " + testo)
+        parti.append("%s: %s" % (utente, testo))
         return "\n".join(parti)
 
     @staticmethod
@@ -1098,18 +1175,31 @@ class Cervello:
         if not testo:
             return {"risposta": "", "azione": None, "mandato": False}
 
+        # «parla inglese» / «speak Italian»: cambia lingua (voce, ascolto, modello)
+        compatto = re.sub(r"[^a-zàèéìòù]", "", testo.lower())
+        compatto = re.sub(r"^(ciro|please)", "", compatto)
+        if compatto in ("parlainglese", "parlaininglese", "ininglese", "speakenglish", "english", "inenglish"):
+            imposta("lingua", "en")
+            return self._detto(testo, "OK, from now on I speak English.", False)
+        if compatto in ("parlaitaliano", "parlainitaliano", "initaliano", "speakitalian", "italian", "initalian",
+                        "italiano"):
+            imposta("lingua", "it")
+            return self._detto(testo, "Va bene, da ora parlo italiano.", False)
+
         # calibrazione guidata: «Ciro, calibrati»; mentre misura, le frasi non sono comandi
         if self.collaudo is not None:
             detto = re.sub(r"[^\w\s]+", " ", testo.lower()).split()
             # whisper a volte attacca le parole («cirocalibrati»): confronto senza spazi
             comando = re.sub(r"^ciro", "", "".join(w for w in detto if w != "ciro"))
             if comando in ("calibrati", "calibrazione", "falacalibrazione", "avvialacalibrazione",
-                           "calibrazioneguidata", "calibrare"):
+                           "calibrazioneguidata", "calibrare", "calibrate", "calibration", "calibrateyourself",
+                           "startthecalibration", "startcalibration"):
                 risposta = self.collaudo.avvia("calibrazione")
                 self.storico += [("io", testo), ("faccia", risposta)]
                 return {"risposta": risposta, "azione": None, "mandato": False,
                         "comando": "misura-silenzio", "secondi": 5}
-            if comando in ("collaudo", "failcollaudo", "avviailcollaudo", "collaudati"):
+            if comando in ("collaudo", "failcollaudo", "avviailcollaudo", "collaudati", "acceptancetest",
+                           "runtheacceptancetest", "selftest"):
                 risposta = self.collaudo.avvia("collaudo")
                 self.storico += [("io", testo), ("faccia", risposta)]
                 return {"risposta": risposta, "azione": None, "mandato": False}

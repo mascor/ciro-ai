@@ -71,7 +71,8 @@ FONTI_CONSUMI = ("claude.ai", "opencode-go", "deepseek")
 # frasi che whisper "sente" nel silenzio o nel rumore: non sono parole tue
 ALLUCINAZIONI = ("sottotitoli", "amara.org", "grazie per la visione", "iscriviti al canale",
                  "grazie per l'attenzione", "a tutti per la visione",
-                 "grazie a tutti", "buona visione", "alla prossima")
+                 "grazie a tutti", "buona visione", "alla prossima",
+                 "thanks for watching", "thank you for watching", "please subscribe", "subtitles by")
 
 
 def log(riga):
@@ -123,9 +124,27 @@ def muto():
 LETTERE_DETTE = {"A": "a", "B": "bi", "C": "ci", "D": "di", "E": "e"}
 
 
+def voce_attuale():
+    """(voce Kokoro, lingua Kokoro) per la lingua di Ciro; FACCIA_VOCE vale per l'italiano."""
+    if lingua() == "it":
+        return VOCE, LINGUA
+    return modulo_testi.VOCI[lingua()], modulo_testi.KOKORO[lingua()]
+
+
+def lingua_whisper():
+    return modulo_testi.WHISPER[lingua()]
+
+
+def cartella_audio():
+    """Gli audio delle calibrazioni (banco di prova), separati per lingua."""
+    return CONFIG_FACCIA / "collaudi" / ("audio" if lingua() == "it" else "audio-" + lingua())
+
+
 def per_voce(testo):
     """Le lettere delle opzioni dette come nomi («B» -> «bi»): una lettera isolata
     letta da Kokoro non si capisce. Parole e sigle restano come sono."""
+    if lingua() != "it":
+        return testo or ""
     return re.sub(r"(?<![\w'])([A-E])(?![\w'])", lambda m: LETTERE_DETTE[m.group(1)], testo or "")
 
 
@@ -136,14 +155,15 @@ def parla_wav(testo, velocita=None):
         raise ValueError("testo vuoto")
     velocita = float(velocita or VELOCITA)
     testo = per_voce(testo)
-    chiave = hashlib.sha256((VOCE + "|%.2f|" % velocita + testo).encode("utf-8")).hexdigest()[:32]
+    voce, lingua_kokoro = voce_attuale()
+    chiave = hashlib.sha256((voce + "|%.2f|" % velocita + testo).encode("utf-8")).hexdigest()[:32]
     CACHE.mkdir(parents=True, exist_ok=True)
     percorso = CACHE / (chiave + ".wav")
     if percorso.exists():
         return percorso.read_bytes()
     import soundfile as sf
     with _kokoro_lock:
-        campioni, frequenza = kokoro().create(testo, voice=VOCE, speed=velocita, lang=LINGUA)
+        campioni, frequenza = kokoro().create(testo, voice=voce, speed=velocita, lang=lingua_kokoro)
     dati = io.BytesIO()
     sf.write(dati, campioni, frequenza, format="WAV", subtype="PCM_16")
     byte_wav = dati.getvalue()
@@ -189,7 +209,7 @@ def scegli_modello_in_sottofondo():
     prova) e salva nel profilo il piu' veloce che non perde precisione."""
     def lavora():
         try:
-            cartella = CONFIG_FACCIA / "collaudi" / "audio"
+            cartella = cartella_audio()
             etichette = json.loads((cartella / "etichette.json").read_text(encoding="utf-8"))
             alias = dict(modulo_cervello.LETTERE_SENTITE)
             alias.update(modulo_cervello.leggi_impostazioni().get("alias_lettere") or {})
@@ -203,7 +223,7 @@ def scegli_modello_in_sottofondo():
                 capite, tempi = 0, []
                 for file, attesa in brevi.items():
                     inizio = time.time()
-                    esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", LINGUA, "-nt", "-np",
+                    esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", lingua_whisper(), "-nt", "-np",
                                             "--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200",
                                             "-f", str(cartella / file)], capture_output=True, text=True,
                                            timeout=120)
@@ -232,7 +252,7 @@ def _normale(testo):
 
 
 def impara_audio(da_imparare, cartella=None):
-    cartella = Path(cartella or CONFIG_FACCIA / "collaudi" / "audio")
+    cartella = Path(cartella or cartella_audio())
     for testo, audio in reversed(_ultimi_audio):
         if _normale(testo) == da_imparare.get("sentito"):
             cartella.mkdir(parents=True, exist_ok=True)
@@ -285,7 +305,7 @@ def trascrivi(byte_audio):
             vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
                    if con_vad and MODELLO_VAD.is_file() else [])
             percorso = modello_rapido() if modello == "rapido" else MODELLO_WHISPER
-            esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", LINGUA,
+            esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", lingua_whisper(),
                                     "-nt", "-np", *vad, "-f", str(pronto)],
                                    capture_output=True, text=True, timeout=180)
             if esito.returncode != 0:
@@ -296,7 +316,8 @@ def trascrivi(byte_audio):
         # whisper "sente" queste frasi nel rumore; un "grazie" da solo non chiede
         # comunque nulla a Ciro, quindi si scarta anche quello
         if any(frase in testo.lower() for frase in ALLUCINAZIONI) or \
-                re.sub(r"[^a-z]", "", testo.lower()) in ("grazie", "grazieatutti", "grazieate"):
+                re.sub(r"[^a-z]", "", testo.lower()) in ("grazie", "grazieatutti", "grazieate", "thankyou",
+                                                         "thanks", "you", "thankyouforwatching", "bye"):
             log("scartata frase inventata da whisper: " + testo[:80])
             registra("ascolto-scartato", testo=testo, motivo="frase inventata da whisper")
             return ""
@@ -1129,7 +1150,8 @@ def quadro():
     sessioni = modulo_cervello.leggi_sessioni() or []
     return {"consumi": consumi(), "attese": attese(sessioni), "sessioni": schede_sessioni(sessioni),
             "pausa": stato_pausa(), "collaudo": _collaudo.fase, "guida": _collaudo.stato_guida(),
-            "calibrato": bool(modulo_cervello.leggi_impostazioni().get("calibrato")),
+            "calibrato": bool(modulo_cervello.leggi_impostazioni().get(modulo_cervello.chiave_lingua("calibrato"))),
+            "lingua": lingua(),
             "microfono": {"soglia": modulo_cervello.leggi_impostazioni().get("soglia_microfono"),
                           "fine_frase_ms": modulo_cervello.profilo_voce().get("fine_frase_ms"),
                           "eco": modulo_cervello.profilo_voce().get("eco")}}
@@ -1240,7 +1262,7 @@ class Gestore(BaseHTTPRequestHandler):
                 self._invia(200, byte_wav, "audio/wav")
             elif percorso == "/api/ascolta":
                 if _collaudo.fase == "frasi":   # le frasi della calibrazione restano sul Mac, per misure
-                    cartella = CONFIG_FACCIA / "collaudi" / "audio"
+                    cartella = cartella_audio()
                     cartella.mkdir(parents=True, exist_ok=True)
                     nome = "frase-%s.wav" % time.strftime("%Y%m%d-%H%M%S")
                     (cartella / nome).write_bytes(corpo)
@@ -1248,7 +1270,7 @@ class Gestore(BaseHTTPRequestHandler):
                         etichette_file = cartella / "etichette.json"
                         etichette = json.loads(etichette_file.read_text(encoding="utf-8")) \
                             if etichette_file.is_file() else {}
-                        etichette[nome] = modulo_collaudo.FRASI[_collaudo.indice]
+                        etichette[nome] = _collaudo.frasi[_collaudo.indice]
                         etichette_file.write_text(json.dumps(etichette, ensure_ascii=False, indent=1),
                                                   encoding="utf-8")
                     except (OSError, ValueError, IndexError):
@@ -1301,6 +1323,12 @@ class Gestore(BaseHTTPRequestHandler):
                     else:
                         esito = {"risposta": "", "fase": _collaudo.fase}
                 self._invia(200, json.dumps(esito, ensure_ascii=False))
+            elif percorso == "/api/lingua":
+                dato = json.loads(corpo or b"{}")
+                if dato.get("lingua") in modulo_testi.LINGUE:
+                    modulo_cervello.imposta("lingua", dato["lingua"])
+                    registra("lingua", lingua=dato["lingua"])
+                self._invia(200, json.dumps({"lingua": lingua()}))
             elif percorso == "/api/pausa":
                 dato = json.loads(corpo or b"{}")
                 self._invia(200, json.dumps(imposta_pausa(dato.get("attiva"), dato.get("solo"))))

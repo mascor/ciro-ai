@@ -22,6 +22,8 @@ from testi import lingua, per_lingua, t
 
 FRASI = ["uno", "due", "sì", "no", "uno per prova due", "come stanno le sessioni oggi"]
 FRASE_LIBERA = FRASI[-1]   # misura le pause e il riconoscimento delle frasi libere
+FRASI_EN = ["one", "two", "yes", "no", "one for test two", "how are the sessions today"]
+NUMERI_EN = {"0": "zero", "1": "one", "2": "two", "3": "three"}
 SILENZIO_SECONDI = 5
 PROGETTI_PROVA = ["prova-ciro", "prova-due"]
 ATTESA_FRASE = 20.0
@@ -29,11 +31,22 @@ ATTESA_COMPITO = 90.0
 ESITO_VISIBILE = 120.0
 OPZIONI = {"A": "procedi", "B": "fermati"}
 NUMERI = {"0": "zero", "1": "uno", "2": "due", "3": "tre"}
-STOP_RE = re.compile(r"^(?:basta|ferma|stop|interrompi)(?: la| il)? (?:calibrazione|collaudo|prova)$")
+STOP_RE = re.compile(r"^(?:(?:basta|ferma|stop|interrompi)(?: la| il)? (?:calibrazione|collaudo|prova)"
+                     r"|stop (?:the )?(?:calibration|acceptance test|test))$")
 PROMPT_COMPITI = [
     "Primo compito: rispondi uno alla domanda che arriva.",
     "Secondo compito: ora correggi, di' rispondi due.",
     "Terzo compito: arrivano due domande. Di' uno per prova due, poi due per prova ciro.",
+]
+PROMPT_COMPITI_EN = [
+    "First task: answer one to the question that comes.",
+    "Second task: now correct it, say answer two.",
+    "Third task: two questions are coming. Say one for prova due, then two for prova ciro.",
+]
+SPIEGAZIONE_COMPITI_EN = [
+    "Answer «one» to prova-ciro's question",
+    "Say «answer two» to correct it",
+    "Say «one for prova due», then «two for prova ciro»",
 ]
 SPIEGAZIONE_COMPITI = [
     "Rispondi «uno» alla domanda di prova-ciro",
@@ -53,7 +66,8 @@ def normalizza(testo):
     testo = unicodedata.normalize("NFKD", (testo or "").lower())
     testo = "".join(c for c in testo if not unicodedata.combining(c))
     testo = re.sub(r"[^a-z0-9 ]+", " ", testo.replace("-", " "))
-    return " ".join(NUMERI.get(p, p) for p in testo.split())
+    numeri = NUMERI_EN if lingua() == "en" else NUMERI
+    return " ".join(numeri.get(p, p) for p in testo.split())
 
 
 class Collaudo:
@@ -70,6 +84,9 @@ class Collaudo:
         self._azzera()
 
     def _azzera(self):
+        self.frasi = per_lingua(FRASI, FRASI_EN)
+        self.prompt_compiti = per_lingua(PROMPT_COMPITI, PROMPT_COMPITI_EN)
+        self.spiegazioni = per_lingua(SPIEGAZIONE_COMPITI, SPIEGAZIONE_COMPITI_EN)
         self.modo = None
         self.inizio_testo = ""
         self.pausa_prima = None
@@ -122,9 +139,9 @@ class Collaudo:
         """What Ciro asked last, to say it again (button «Ripeti»)."""
         if self.fase == "frasi":
             self.chiesta = self.orologio()
-            return detta(FRASI[self.indice])
+            return detta(self.frasi[self.indice])
         if self.fase == "compiti":
-            return PROMPT_COMPITI[self.compito]
+            return self.prompt_compiti[self.compito]
         if self.fase == "silenzio":
             return t("Resta in silenzio per cinque secondi.")
         return ""
@@ -145,12 +162,12 @@ class Collaudo:
                     "spiegazione": t("Resta in silenzio"), "secondi": SILENZIO_SECONDI}
         if self.fase == "frasi":
             return {"fase": "frasi", "titolo": t("Calibrazione · frasi"), "passo": self.indice + 1,
-                    "totale": len(FRASI), "dire": FRASI[self.indice], "ultima": self.ultima,
+                    "totale": len(self.frasi), "dire": self.frasi[self.indice], "ultima": self.ultima,
                     "esiti": [r["ok"] for r in self.frasi_sentite]}
         if self.fase == "compiti":
-            return {"fase": "compiti", "titolo": t("Collaudo · compito %d di %d") % (self.compito + 1, len(PROMPT_COMPITI)),
-                    "passo": self.compito + 1, "totale": len(PROMPT_COMPITI),
-                    "dire": "", "spiegazione": SPIEGAZIONE_COMPITI[self.compito],
+            return {"fase": "compiti", "titolo": t("Collaudo · compito %d di %d") % (self.compito + 1, len(self.prompt_compiti)),
+                    "passo": self.compito + 1, "totale": len(self.prompt_compiti),
+                    "dire": "", "spiegazione": self.spiegazioni[self.compito],
                     "esiti": [c["ok"] for c in self.compiti if c["ok"] is not None]}
         return {"fase": "fine", "titolo": t("Collaudo finito") if self.modo == "collaudo" else t("Calibrazione finita"),
                 "riepilogo": self.riepilogo}
@@ -167,7 +184,7 @@ class Collaudo:
         self.rumore["soglia"] = provvisoria
         self.fase = "frasi"
         self._chiedi_frase()
-        return detta(FRASI[0], "Ora ripeti dopo di me: ")
+        return detta(self.frasi[0], "Ora ripeti dopo di me: ")
 
     def _chiedi_frase(self):
         self.chiesta = self.orologio()
@@ -178,7 +195,7 @@ class Collaudo:
         a, s = normalizza(attesa), normalizza(sentita)
         if a == s:
             return True
-        if attesa == FRASE_LIBERA:   # frase lunga: basta la maggior parte delle parole
+        if attesa == self.frasi[-1]:   # frase lunga: basta la maggior parte delle parole
             parole = a.split()
             return sum(1 for p in parole if p in s.split()) >= 0.6 * len(parole)
         if len(a) == 1 and s:
@@ -195,15 +212,15 @@ class Collaudo:
         if ok:   # i tentativi sbagliati prima di quello giusto: errori tipici di questa voce
             for sbagliato in self.tentativi[:-1]:
                 if len(normalizza(sbagliato)) <= 3:
-                    modulo_cervello.impara_confusione(sbagliato, FRASI[self.indice])
-        self.frasi_sentite.append({"attesa": FRASI[self.indice], "ok": ok, "tentativi": list(self.tentativi),
+                    modulo_cervello.impara_confusione(sbagliato, self.frasi[self.indice])
+        self.frasi_sentite.append({"attesa": self.frasi[self.indice], "ok": ok, "tentativi": list(self.tentativi),
                                    "secondi": round(self.orologio() - self.chiesta, 1)})
         self.indice += 1
 
     def _prossima_frase(self):
-        if self.indice < len(FRASI):
+        if self.indice < len(self.frasi):
             self._chiedi_frase()
-            return detta(FRASI[self.indice])
+            return detta(self.frasi[self.indice])
         self._fine_calibrazione()
         return ""
 
@@ -217,7 +234,7 @@ class Collaudo:
         else:
             soglia = round(max(0.008, 3 * rumore), 4)
         modulo_cervello.imposta("soglia_microfono", soglia)
-        modulo_cervello.imposta("calibrato", True)   # la prima volta parte da sola, poi mai piu'
+        modulo_cervello.imposta(modulo_cervello.chiave_lingua("calibrato"), True)   # la prima volta parte da sola
         self.rumore["soglia"] = soglia
         self.rumore["voce"] = voce
         profilo = {}
@@ -233,7 +250,7 @@ class Collaudo:
             modulo_cervello.aggiorna_profilo(**profilo)
         self.rumore.update(profilo)
         capite = sum(1 for r in self.frasi_sentite if r["ok"])
-        frase = t("Calibrazione finita: ti ho capito %d frasi su %d.") % (capite, len(FRASI))
+        frase = t("Calibrazione finita: ti ho capito %d frasi su %d.") % (capite, len(self.frasi))
         if voce and voce < 5 * rumore:
             frase += t(" Parli piano rispetto al rumore: avvicinati al microfono.")
         self._chiudi(frase)
@@ -256,15 +273,15 @@ class Collaudo:
             self.livelli.append(float(livello))
         self.pause.extend(int(p) for p in (pause or []) if 0 < int(p) < 3000)
         self.tentativi.append(testo)
-        ok = self._uguale(FRASI[self.indice], testo)
-        self.ultima = {"attesa": FRASI[self.indice], "sentito": testo, "ok": ok}
+        ok = self._uguale(self.frasi[self.indice], testo)
+        self.ultima = {"attesa": self.frasi[self.indice], "sentito": testo, "ok": ok}
         if ok or self.ripetuta:
             self._registra_frase(ok)
             prossima = self._prossima_frase()
             return {"risposta": prossima, "azione": None, "mandato": False}
         self.ripetuta = True
         self.chiesta = self.orologio()
-        return {"risposta": t("Non ho capito bene. %s") % detta(FRASI[self.indice], "Ripeti: "),
+        return {"risposta": t("Non ho capito bene. %s") % detta(self.frasi[self.indice], "Ripeti: "),
                 "azione": None, "mandato": False}
 
     # ------------------------------------------------------------ acceptance test
@@ -281,7 +298,7 @@ class Collaudo:
         self.compito = indice
         self.compiti.append({"numero": indice + 1, "inizio": self.orologio(), "turni": 0, "ok": None,
                              "dettaglio": ""})
-        self.dire(PROMPT_COMPITI[indice])
+        self.dire(self.prompt_compiti[indice])
         if indice == 0:
             self.domande["uno"] = self._chiedi("prova-ciro", "uno")
             self.compiti[0]["domanda"] = self.domande["uno"]
@@ -333,7 +350,7 @@ class Collaudo:
                 if not self.ripetuta:
                     self.ripetuta = True
                     self.chiesta = self.orologio()
-                    self.dire(t("Non ti ho sentito. %s") % detta(FRASI[self.indice], "Ripeti: "))
+                    self.dire(t("Non ti ho sentito. %s") % detta(self.frasi[self.indice], "Ripeti: "))
                 else:
                     self._registra_frase(False)
                     prossima = self._prossima_frase()
@@ -348,7 +365,7 @@ class Collaudo:
             return
         compito["ok"], compito["dettaglio"] = esito if esito else (False, "tempo scaduto")
         compito["secondi"] = round(self.orologio() - compito["inizio"], 1)
-        if self.compito + 1 < len(PROMPT_COMPITI):
+        if self.compito + 1 < len(self.prompt_compiti):
             self._avvia_compito(self.compito + 1)
         else:
             self._fine_collaudo()
@@ -361,7 +378,7 @@ class Collaudo:
         risposta = (statistics.mean(trascrizioni) if trascrizioni else 0) + \
                    (statistics.mean(cervello) if cervello else 0)
         riusciti = sum(1 for c in self.compiti if c["ok"])
-        frase = t("Collaudo finito: %d compiti su %d") % (riusciti, len(PROMPT_COMPITI))
+        frase = t("Collaudo finito: %d compiti su %d") % (riusciti, len(self.prompt_compiti))
         if risposta:
             frase += t(", rispondo in circa %d secondi") % max(1, round(risposta))
         self._chiudi(frase + ".", trascrizioni, cervello)
