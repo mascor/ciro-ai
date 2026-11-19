@@ -217,6 +217,11 @@ class TestChatSicura(BaseRisposte):
         self.assertEqual([v["chat_id"] for v in voci], ["lettura|work@example.com"])
         self.assertTrue(voci[0]["silenzioso"])
         self.assertIn("riapri la scheda", voci[0]["testo"])
+        self.arriva([], account="profilo-0")                      # placeholder name: never warned about
+        dati = json.loads((self.tmp / "chat.json").read_text(encoding="utf-8"))
+        dati["account"]["profilo-0"] = time.time() - modulo_chat.ASSENTE - 60
+        (self.tmp / "chat.json").write_text(json.dumps(dati), encoding="utf-8")
+        self.assertNotIn("profilo-0", self.chat.silenziosi())
         self.arriva([DIRETTA])                                    # the tab is back: the message too
         self.assertEqual([v.get("mittente") for v in server.attese() if v.get("tipo") == "chat"], ["Luca Bianchi"])
 

@@ -192,8 +192,9 @@ class Chat:
         dati = self._leggi()
         letti = {v.get("account") for v in dati["conversazioni"].values()} | {
             a for a, l in dati["letture"].items() if l.get("ok")}
+        # "profilo-N": the address was not found (before extension 1.6); not a real mailbox to warn about
         return {a: int(adesso - quando) for a, quando in dati["account"].items()
-                if a in letti and ASSENTE < adesso - quando <= DURATA}
+                if a in letti and not a.startswith("profilo-") and ASSENTE < adesso - quando <= DURATA}
 
     def account_assenti(self, adesso=None):
         adesso = time.time() if adesso is None else adesso
