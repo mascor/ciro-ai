@@ -522,6 +522,40 @@ class TestRisposteVeloci(BaseCiro):
         self.assertTrue(self.c.chiedi("uno")["mandato"])
         self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "A")
 
+    # --- profilo voce: errori tipici di questa voce
+    def test_confusione_nota_chiede_conferma(self):
+        modulo_cervello.aggiorna_profilo(confusioni={"di": "due"})
+        identificativo = self.annunciata(opzioni={"A": "procedi", "B": "fermati"})
+        esito = self.c.chiedi("Di.")
+        self.assertEqual(esito["risposta"], "Hai detto due, fermati? Di' sì, oppure il numero.")
+        self.assertEqual(domande.leggi(identificativo)["stato"], "in-attesa")
+        self.assertTrue(self.c.chiedi("sì")["mandato"])
+        self.assertEqual(domande.leggi(identificativo)["risposta"]["scelta"], "B")
+
+    def test_confusione_su_domanda_si_no(self):
+        modulo_cervello.aggiorna_profilo(confusioni={"c": "sì"})
+        self.annunciata(opzioni={"S": "procedi", "N": "fermati"})
+        self.assertEqual(self.c.chiedi("C")["risposta"], "Hai detto sì, procedi? Di' sì, oppure il numero.")
+
+    def test_risposta_chiara_non_chiede(self):
+        modulo_cervello.aggiorna_profilo(confusioni={"di": "due"})
+        self.annunciata(opzioni={"A": "procedi", "B": "fermati"})
+        self.assertTrue(self.c.chiedi("due")["mandato"])
+
+    def test_correzione_insegna_la_confusione(self):
+        self.annunciata(opzioni={"A": "procedi", "B": "fermati"})
+        self.assertTrue(self.c.chiedi("a")["mandato"])
+        self.c.chiedi("rispondi due")
+        self.assertEqual(modulo_cervello.profilo_voce()["confusioni"], {"a": "due"})
+        self.assertEqual(self.c.da_imparare, {"sentito": "a", "giusta": "due"})
+
+    def test_correzione_di_una_frase_lunga_non_insegna(self):
+        # changing one's mind is not a recognition error
+        self.annunciata(opzioni={"A": "procedi", "B": "fermati"})
+        self.c.chiedi("procedi")
+        self.c.chiedi("rispondi due")
+        self.assertEqual(modulo_cervello.profilo_voce().get("confusioni", {}), {})
+
     def test_ok_non_e_una_risposta(self):
         identificativo = self.annunciata(opzioni={"S": "procedi", "N": "fermati"}, raccomanda="S")
         for detto in ("ok", "perfetto", "certo"):
