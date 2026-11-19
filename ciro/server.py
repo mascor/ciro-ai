@@ -665,7 +665,7 @@ def attese(sessioni=None):
                        "account": voce.get("account"), "mittente": voce.get("nome"),
                        "diretto": voce.get("diretto"), "urgente": voce.get("urgente"),
                        "risposta": voce.get("risposta"), "motivo": voce.get("motivo"),
-                       "testo": (voce.get("testo") or "")[:280], "a_voce": False,
+                       "testo": (voce.get("testo") or t("Messaggi non letti"))[:280], "a_voce": False,
                        "secondi": int(adesso_s - voce.get("visto", adesso_s))})
     for account, secondi in _chat.letture_fallite(adesso_s).items():
         # zero messaggi e lettura fallita sono diversi: questa si vede nel pannello
@@ -676,7 +676,7 @@ def attese(sessioni=None):
     # prima chi aspetta da piu' tempo; i messaggi di Chat non urgenti in fondo
     elenco.sort(key=lambda v: (v.get("tipo") == "chat" and not v.get("urgente"), -v["secondi"]))
     numera(elenco)
-    return elenco[:10]
+    return elenco[:40]   # il pannello scorre (19/11/2026): prima 10, e i messaggi di Chat sparivano
 
 
 def chiave_numero(voce):
@@ -765,7 +765,9 @@ def _giudica(voci):
 
 def ricevi_chat(dato, in_sottofondo=True):
     if dato.get("conversazioni") is None:   # l'elenco non e' nella pagina: solo conteggi, per capire dove sta
-        _chat.lettura_fallita(dato.get("account"))   # lettura fallita, non «zero messaggi»
+        if (dato.get("diagnosi") or {}).get("cornice") != "interna":
+            # lettura fallita, non «zero messaggi» (le cornici di Chat dentro Gmail non hanno l'elenco: normale)
+            _chat.lettura_fallita(dato.get("account"))
         try:
             file_diagnosi = Path(modulo_cervello.CONTESTO).with_name("chat-diagnosi.json")
             vecchie = json.loads(file_diagnosi.read_text(encoding="utf-8")) if file_diagnosi.exists() else []
@@ -1071,6 +1073,9 @@ def giro_domande():
             scheda = domande.passa(scheda["id"], "in-valutazione", "ciro")
         except (domande.PassaggioNonAmmesso, domande.SchedaNonTrovata):
             continue  # la sta valutando un altro giro
+        if scheda.get("canale") == "hook":
+            _metti_in_attesa(scheda)   # dagli hook delle sessioni: risponde solo l'utente
+            continue
         autorizzazioni = coordinatore.carica_autorizzazioni()
         esito = coordinatore.valuta(scheda, [], autorizzazioni, None)
         preferenze = preferenze_pertinenti(modulo_cervello.leggi_regole(), scheda)
@@ -1084,6 +1089,127 @@ def giro_domande():
         else:
             _metti_in_attesa(scheda)
     return fili
+
+
+# ------------------------------------------------- hook delle sessioni
+# «Ciro connect» (docs/hooks-design.md): Claude Code manda a /hooks/claude le
+# richieste di permesso e le domande a scelta. Ciro le fa diventare domande
+# numerate (solo registro, niente posta), aspetta la risposta dell'utente e la
+# restituisce alla sessione. Se Ciro e' spento, zitto o in pausa, o se l'utente
+# non risponde in tempo, risposta vuota: la sessione chiede nel terminale.
+ATTESA_HOOK = 40          # secondi; il timeout dell'hook in settings.json e' 45
+PAGINA_SVEGLIA = 15       # la pagina sveglia chiede i messaggi ogni pochi secondi
+_pagina = {"sveglia": 0.0}
+
+
+def segna_pagina_sveglia():
+    _pagina["sveglia"] = time.time()
+
+
+def pagina_sveglia():
+    return time.time() - _pagina["sveglia"] <= PAGINA_SVEGLIA
+
+
+def _corto(testo, massimo=120):
+    testo = re.sub(r"\s+", " ", str(testo or "")).strip()
+    return testo if len(testo) <= massimo else testo[:massimo - 1].rstrip() + "…"
+
+
+def riassunto_permesso(strumento, ingresso):
+    """Cosa vuole fare la sessione, in una frase breve da dire a voce."""
+    ingresso = ingresso if isinstance(ingresso, dict) else {}
+    if strumento == "Bash":
+        return t("vuole eseguire: %s") % _corto(ingresso.get("command"), 100)
+    if strumento in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        return t("vuole modificare il file %s") % os.path.basename(
+            str(ingresso.get("file_path") or ingresso.get("notebook_path") or "?"))
+    if strumento in ("WebFetch", "WebSearch"):
+        dove = urlparse(str(ingresso.get("url") or "")).hostname or _corto(ingresso.get("query"), 60)
+        return t("vuole consultare il web: %s") % dove
+    if strumento.startswith("mcp__"):
+        parti = strumento.split("__")
+        return t("vuole usare %s di %s") % (parti[-1], parti[1] if len(parti) > 2 else "?")
+    return t("vuole usare %s") % strumento
+
+
+def _domanda_da_hook(dato):
+    """(progetto, oggetto, domanda, opzioni, operazione, risposta) o None se non la gestiamo.
+    `risposta(scelta)` costruisce l'uscita dell'hook per la lettera scelta."""
+    evento = dato.get("hook_event_name")
+    progetto = os.path.basename(str(dato.get("cwd") or "").rstrip("/")) or "sessione"
+    strumento = str(dato.get("tool_name") or "")
+    ingresso = dato.get("tool_input") if isinstance(dato.get("tool_input"), dict) else {}
+    if evento == "PermissionRequest" and strumento:
+        frase = riassunto_permesso(strumento, ingresso)
+
+        def risposta(scelta):
+            decisione = {"behavior": "allow"} if scelta == "S" else {
+                "behavior": "deny", "message": "Negato da %s tramite Ciro." % modulo_cervello.NOME_UTENTE}
+            return {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decisione}}
+        return (progetto, t("Permesso: %s") % strumento, frase[:1].upper() + frase[1:] + ". " + t("Consento?"),
+                {"S": t("consenti"), "N": t("nega")}, "permesso", risposta)
+    if evento == "PreToolUse" and strumento == "AskUserQuestion":
+        domande_hook = ingresso.get("questions") or []
+        if len(domande_hook) != 1 or domande_hook[0].get("multiSelect"):
+            return None   # piu' domande o scelta multipla: nel terminale
+        domanda = domande_hook[0]
+        etichette = [str(o.get("label") or "") for o in (domanda.get("options") or []) if o.get("label")]
+        if not 2 <= len(etichette) <= 5:
+            return None
+        opzioni = {chr(65 + i): etichetta for i, etichetta in enumerate(etichette)}
+
+        def risposta(scelta):
+            nuovo = dict(ingresso, answers={str(domanda.get("question") or ""): opzioni[scelta]})
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+                                           "updatedInput": nuovo}}
+        return (progetto, str(domanda.get("header") or "domanda"), _corto(domanda.get("question"), 280),
+                opzioni, "scelta", risposta)
+    return None
+
+
+def gestisci_hook(dato, attesa=None, adesso=time.time):
+    """L'uscita per l'hook (dict) o None: «chiedi nel terminale come sempre»."""
+    if not isinstance(dato, dict) or muto() or not pagina_sveglia():
+        return None
+    pronta = _domanda_da_hook(dato)
+    if pronta is None:
+        return None
+    progetto, oggetto, testo, opzioni, operazione, risposta = pronta
+    if in_pausa(modulo_posta.slug(progetto, 60)):
+        return None
+    try:
+        identificativo = modulo_posta.chiedi_da_hook(progetto, oggetto, testo, opzioni, operazione)
+    except Exception as errore:  # noqa: BLE001
+        registra("errore-hook", errore=repr(errore)[:300])
+        return None
+    registra("hook", evento=dato.get("hook_event_name"), domanda_id=identificativo)
+    if attesa is None:   # impostabile: «attesa_hook» in impostazioni.json (secondi, al massimo 44)
+        attesa = min(44, max(5, int(modulo_cervello.leggi_impostazioni().get("attesa_hook") or ATTESA_HOOK)))
+    fine = adesso() + attesa
+    while True:
+        scheda = domande.leggi(identificativo)
+        if scheda.get("stato") == "risposta-consegnata":
+            break
+        if adesso() >= fine:
+            try:
+                domande.passa(identificativo, "annullata", "ciro", "passata al terminale",
+                              solo_da=("ricevuta", "in-valutazione", "in-attesa"))
+                registra("hook-scaduto", domanda_id=identificativo)
+                return None
+            except domande.PassaggioNonAmmesso:
+                continue   # la risposta e' arrivata proprio adesso: rileggo
+        time.sleep(0.2)
+    esito = scheda.get("risposta") or {}
+    scelta = str(esito.get("scelta") or "")
+    if esito.get("motivo") != "utente" or scelta not in opzioni:
+        return None   # solo una risposta dell'utente consente qualcosa
+    for stato in ("recepita", "risolta"):
+        try:
+            domande.passa(identificativo, stato, "ciro", "restituita alla sessione dall'hook")
+        except (domande.PassaggioNonAmmesso, domande.SchedaNonTrovata):
+            pass
+    registra("hook-risposto", domanda_id=identificativo, scelta=scelta)
+    return risposta(scelta)
 
 
 # ------------------------------------------------------------ credenziali
@@ -1451,6 +1577,7 @@ class Gestore(BaseHTTPRequestHandler):
         if percorso in ("/", "/index.html"):
             self._file("index.html", "text/html; charset=utf-8")
         elif percorso == "/api/messaggi":
+            segna_pagina_sveglia()
             if muto():  # zitto: i messaggi restano in coda per dopo
                 self._invia(200, json.dumps({"messaggi": [], "muto": True}))
                 return
@@ -1538,6 +1665,10 @@ class Gestore(BaseHTTPRequestHandler):
                 with _coda_lock:
                     _coda.append({"testo": testo, "da": dato.get("da") or "opencode"})
                 self._invia(200, json.dumps({"ok": True}))
+            elif percorso == "/hooks/claude":
+                # hook http di Claude Code: risposta vuota = chiedi nel terminale
+                uscita = gestisci_hook(json.loads(corpo or b"{}"))
+                self._invia(200, json.dumps(uscita) if uscita else b"")
             elif percorso == "/api/evento":
                 # eventi della pagina: interruzioni, errori, ricaricamenti, accensioni
                 dato = json.loads(corpo or b"{}")

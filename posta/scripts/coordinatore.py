@@ -20,7 +20,8 @@ import time
 from pathlib import Path
 
 VIETATE = frozenset({"deploy-produzione", "cancellazione", "database", "configurazione",
-                     "credenziali", "servizio-esterno", "abbonamento", "altro"})
+                     "credenziali", "servizio-esterno", "abbonamento", "altro",
+                     "permesso"})   # a tool permission asked by a session hook: only the user
 SUL_SERVER = frozenset({"deploy-produzione", "cancellazione", "database", "configurazione"})
 UNICA_AUTORIZZABILE = "deploy-prova"
 NOME_RE = re.compile(r"^[A-Za-z0-9_-]{1,120}$")

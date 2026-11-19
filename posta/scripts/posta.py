@@ -96,7 +96,7 @@ CODICE_STATO = 4
 
 OPERAZIONI = ("scelta", "deploy-prova", "deploy-produzione", "cancellazione",
               "database", "configurazione", "credenziali", "servizio-esterno",
-              "abbonamento", "altro")
+              "abbonamento", "altro", "permesso")
 AMBIENTI = ("locale", "prova", "produzione")
 LETTERA_RE = re.compile(r"^[A-Z]$")
 # "utente": the user answered; "regola:<id>": a saved rule answered
@@ -1434,6 +1434,30 @@ def chiedi(da, oggetto, domanda, opzioni, operazione, bloccato, raccomanda=None,
     return identificativo
 
 
+def chiedi_da_hook(progetto, oggetto, domanda, opzioni, operazione="permesso", testo=""):
+    """Question from a session hook (Claude Code, OpenCode): only the record, no mail.
+
+    The hook waits for the answer in the registry and gives it back to the session
+    itself, so nothing goes to the manager or to the session's mailbox. Returns the ID.
+    """
+    progetto = valida_casella(slug(progetto, 60))
+    if operazione not in OPERAZIONI:
+        raise ErrorePosta("operazione non valida: %r" % (operazione,))
+    if not _una_riga(domanda) or not opzioni:
+        raise ErrorePosta("domanda e opzioni non possono essere vuote")
+    identificativo = "%s-%s-%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), progetto,
+                                      slug(oggetto or "hook", 30), os.urandom(3).hex())
+    _domande().crea({
+        "id": identificativo, "progetto": progetto, "oggetto": _una_riga(oggetto),
+        "domanda": _una_riga(domanda), "opzioni": dict(opzioni), "raccomanda": None,
+        "operazione": operazione, "ambiente": None, "condizioni": [],
+        "bloccato": _una_riga(oggetto) or "la sessione", "contesto": (testo or "").strip(),
+        "canale": "hook",
+    })
+    registra("chiedi-hook", progetto, identificativo, {"operazione": operazione})
+    return identificativo
+
+
 def _scheda(identificativo):
     domande = _domande()
     try:
@@ -1473,6 +1497,9 @@ def rispondi_domanda(identificativo, scelta, testo, motivo, da="opencode"):
     scritto = {}
 
     def manda(attuale):
+        if attuale.get("canale") == "hook":
+            scritto["percorso"] = None   # the hook reads the answer from the record: no mail
+            return {}
         corpo = ("Risposta alla domanda %s: %s) %s\nMotivo: %s\n\n"
                  "Prima di agire esegui: posta.py recepita --id %s --casella %s "
                  "(se esce con 4 non rifare nulla). A lavoro finito: posta.py risolta --id %s"

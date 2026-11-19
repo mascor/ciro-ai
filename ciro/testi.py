@@ -155,6 +155,17 @@ EN = {
     "Il messaggio è troppo lungo per leggertelo. Dimmelo più corto.":
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
+    "Messaggi non letti": "Unread messages",
+    # session hooks («ciro connect»)
+    "vuole eseguire: %s": "wants to run: %s",
+    "vuole modificare il file %s": "wants to edit the file %s",
+    "vuole consultare il web: %s": "wants to look on the web: %s",
+    "vuole usare %s di %s": "wants to use %s from %s",
+    "vuole usare %s": "wants to use %s",
+    "Permesso: %s": "Permission: %s",
+    "Consento?": "Shall I allow it?",
+    "consenti": "allow",
+    "nega": "deny",
     # «cosa mi sono perso?»
     "Non riesco a fare il punto: %s": "I can't catch you up: %s",
     "una domanda nuova da %s": "one new question from %s",
