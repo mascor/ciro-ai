@@ -201,12 +201,20 @@ Everything has a default; these environment variables change it:
 | `FACCIA_PORTA` | local port | `8765` |
 | `POSTA_RADICE` | mailbox folder | `~/.posta-agenti` |
 
+`ciro/avvia.command` also reads `~/.config/ciro/env` if it exists, so your personal settings stay
+outside the repository:
+
+```bash
+mkdir -p ~/.config/ciro
+printf 'export CIRO_UTENTE=Mario\nexport CIRO_NOMI_UTENTE="Mario,Mario Rossi"\n' > ~/.config/ciro/env
+```
+
 In OpenCode, connect DeepSeek with `/connect` — never paste API keys in a chat or a file.
 
 ### 7. Start
 
 ```bash
-CIRO_UTENTE=Mario ./ciro/avvia.command
+./ciro/avvia.command
 ```
 
 The browser opens `http://127.0.0.1:8765/`: press **Inizia** ("Start") and allow the

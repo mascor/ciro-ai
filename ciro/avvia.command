@@ -20,6 +20,9 @@ fi
   done
 ) &
 
+# personal settings, kept outside the repository (CIRO_UTENTE, CIRO_NOMI_UTENTE, CIRO_PYTHON...)
+[ -f "$HOME/.config/ciro/env" ] && . "$HOME/.config/ciro/env"
+
 # Python with kokoro-onnx installed (see README): CIRO_PYTHON overrides it
 PY="${CIRO_PYTHON:-$HOME/.local/share/kokoro/venv/bin/python}"
 exec "$PY" -I ./server.py "$PORTA"

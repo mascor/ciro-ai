@@ -495,7 +495,8 @@ def sorveglia_attese():
                 frase = _frase_avviso(voce)
                 with _coda_lock:
                     if len(_coda) < 10:
-                        _coda.append({"testo": frase, "da": "avvisi"})
+                        _coda.append({"testo": frase, "da": "avvisi", "chiave": chiave,
+                                      "progetto": progetto, "quando": time.time()})
                 _cervello.annota_avviso(voce.get("progetto"), frase,
                                         domanda=voce.get("tipo") in ("domanda", "decisione"))
                 registra("avviso", testo=frase)
@@ -503,6 +504,46 @@ def sorveglia_attese():
         except Exception as errore:  # noqa: BLE001
             registra("errore-avvisi", errore=repr(errore)[:300])
         time.sleep(8)
+
+
+# --------------------------------------------- coda al risveglio
+# Mentre Ciro dorme gli avvisi si accumulano: quando la pagina li prende, Ciro
+# dice solo quelli ancora aperti, e se le domande sono piu' di 3 una frase sola.
+ETA_MASSIMA_CODA = 15 * 60
+DOMANDE_DA_LEGGERE = 3
+
+
+def filtra_coda(voci, attuali=None, adesso=None):
+    adesso = time.time() if adesso is None else adesso
+    tenute = []
+    for voce in voci:
+        if voce.get("domanda_id") and voce.get("tipo") == "domanda":
+            try:
+                aperta = domande.leggi(voce["domanda_id"]).get("stato") == "in-attesa"
+            except Exception:  # noqa: BLE001
+                aperta = False
+        elif voce.get("da") == "avvisi" and voce.get("chiave"):
+            if attuali is None:
+                try:
+                    attuali = {_chiave(v) for v in attese()}
+                except Exception:  # noqa: BLE001
+                    attuali = set()
+            aperta = voce["chiave"] in attuali
+        else:
+            aperta = adesso - float(voce.get("quando") or adesso) <= ETA_MASSIMA_CODA
+        if aperta:
+            tenute.append(voce)
+    da_decidere = [v for v in tenute if v.get("tipo") == "domanda" or v.get("da") == "avvisi"]
+    if len(da_decidere) > DOMANDE_DA_LEGGERE:
+        progetti = [v.get("progetto") or "una sessione" for v in da_decidere]
+        frase = ("Ci sono %d domande per te: da %s. Le trovi a sinistra; dimmi da quale parto."
+                 % (len(da_decidere), _elenco(progetti)))
+        tenute = [v for v in tenute if v not in da_decidere] + [
+            {"testo": frase, "da": "riassunto", "quando": adesso}]
+        # una risposta breve adesso non deve andare a una domanda mai letta
+        _cervello.ultimo_detto = {"tipo": "avviso", "id": None, "ora": adesso}
+        registra("coda-riassunta", testo=frase)
+    return tenute
 
 
 # ------------------------------------------------- domande strutturate
@@ -559,6 +600,7 @@ def frase_domanda(scheda):
 
 
 def _in_coda(voce):
+    voce.setdefault("quando", time.time())
     with _coda_lock:
         if len(_coda) < 20:
             _coda.append(voce)
@@ -917,6 +959,7 @@ class Gestore(BaseHTTPRequestHandler):
                 return
             with _coda_lock:
                 messaggi, _coda[:] = list(_coda), []
+            messaggi = filtra_coda(messaggi)
             self._invia(200, json.dumps({"messaggi": messaggi, "muto": False}))
         elif percorso == "/api/versione":
             self._invia(200, json.dumps({"versione": versione()}))
