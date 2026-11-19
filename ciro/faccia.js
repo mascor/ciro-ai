@@ -885,6 +885,15 @@ function adattaSessioni() {
 }
 window.addEventListener("resize", adattaSessioni);
 
+// la colonna destra parte sotto i pulsanti in alto, anche se vanno a capo
+const comandiAlto = document.getElementById("comandi-alto");
+function adattaComandi() {
+  const altezza = comandiAlto ? comandiAlto.getBoundingClientRect().bottom : 56;
+  document.documentElement.style.setProperty("--sotto-comandi", Math.ceil(altezza + 20) + "px");
+}
+window.addEventListener("resize", adattaComandi);
+if (window.ResizeObserver && comandiAlto) new ResizeObserver(adattaComandi).observe(comandiAlto);
+
 // pausa progetti: Ciro non annuncia le sessioni (tranne i progetti permessi)
 const pulsantePausa = document.getElementById("pausa-progetti");
 function disegnaPausa(pausa) {
@@ -892,10 +901,11 @@ function disegnaPausa(pausa) {
   pulsantePausa.classList.toggle("attiva", attiva);
   pulsantePausa.setAttribute("aria-pressed", String(attiva));
   const tranne = attiva && pausa.solo && pausa.solo.length ? " tranne " + pausa.solo.join(", ") : "";
-  pulsantePausa.textContent = attiva ? "▶ Riprendi progetti" + (tranne ? " (attivi:" + tranne.replace(" tranne", "") + ")" : "")
-                                     : "⏸ Pausa progetti";
-  pulsantePausa.title = attiva ? "Progetti in pausa: Ciro non annuncia le sessioni. Premi per riprendere."
-                               : "Ciro smette di annunciare le domande delle sessioni (restano nel pannello)";
+  pulsantePausa.textContent = attiva ? "▶ Riprendi progetti" : "⏸ Pausa progetti";
+  pulsantePausa.title = attiva
+    ? "Progetti in pausa" + (tranne ? " (parlano solo:" + tranne.replace(" tranne", "") + ")" : "") + ". Premi per riprendere."
+    : "Ciro smette di annunciare le domande delle sessioni (restano nel pannello)";
+  adattaComandi();
 }
 pulsantePausa.addEventListener("click", async () => {
   const attiva = !pulsantePausa.classList.contains("attiva");
