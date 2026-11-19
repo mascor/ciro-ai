@@ -56,8 +56,12 @@ export const CiroPlugin = {
           const sessione = await ctx.session.get({ sessionID: richiesta.sessionID })
           const dati = sessione?.data ?? sessione
           titolo = typeof dati?.title === "string" ? dati.title : ""
-          cartella = typeof dati?.directory === "string" ? dati.directory : ""
-        } catch {}
+          cartella = typeof dati?.directory === "string" ? dati.directory
+            : (typeof dati?.path?.cwd === "string" ? dati.path.cwd : "")
+          if (!cartella) scriviLog(`sessione senza cartella: campi ${Object.keys(dati ?? {}).join(",")}`)
+        } catch (errore) {
+          scriviLog(`session.get: ${errore?.message ?? errore}`)
+        }
         // field names differ between OpenCode versions: action/resources (2.3), permission/patterns
         // (2.x SDK types), type/pattern (1.x)
         const testo = (x) => typeof x === "string" ? x : (x?.pattern ?? x?.path ?? x?.value ?? JSON.stringify(x))
@@ -71,13 +75,15 @@ export const CiroPlugin = {
           patterns: risorse,
           what: richiesta.title,
           title: titolo,
-          directory: cartella || process.cwd(),
+          // the session's folder; else the folder of the file it wants to touch
+          directory: cartella || (risorse[0]?.startsWith("/") ? risorse[0].replace(/\/[^/]*$/, "") : ""),
         }, ATTESA_MS)
         const risposta = esito?.reply
         if (risposta !== "once" && risposta !== "reject") return // nothing: the terminal prompt stays
         const permessi = ctx.permission ?? ctx.client?.permission
         if (!permessi?.reply) throw new Error("permission.reply non disponibile in questa versione di OpenCode")
-        await permessi.reply({ requestID: richiesta.id, reply: risposta,
+        // OpenCode 2.3: { sessionID, requestID, decision: "once" | "always" | "reject", message }
+        await permessi.reply({ sessionID: richiesta.sessionID, requestID: richiesta.id, decision: risposta,
           ...(risposta === "reject" ? { message: "Negato dall'utente tramite Ciro." } : {}) })
         scriviLog(`risposta ${risposta} a ${richiesta.id}`)
       } catch (errore) {
