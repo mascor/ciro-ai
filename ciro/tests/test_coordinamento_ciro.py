@@ -40,8 +40,10 @@ class BaseCiro(unittest.TestCase):
             "REGISTRO": modulo_cervello.REGISTRO, "MEMORIA": modulo_cervello.MEMORIA,
             "CONTESTO": modulo_cervello.CONTESTO, "leggi_sessioni": modulo_cervello.leggi_sessioni,
             "RADICE_POSTA": modulo_cervello.RADICE_POSTA,
+            "IMPOSTAZIONI": modulo_cervello.IMPOSTAZIONI,
         }
         modulo_cervello.RADICE_POSTA = self.tmp / "posta"
+        modulo_cervello.IMPOSTAZIONI = self.tmp / "impostazioni.json"   # never the real settings
         modulo_cervello.REGISTRO = self.tmp / "conversazioni.log"
         modulo_cervello.MEMORIA = self.tmp / "memoria-ciro.md"
         modulo_cervello.CONTESTO = self.tmp / "contesto.json"

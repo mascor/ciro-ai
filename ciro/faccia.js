@@ -373,6 +373,7 @@ let parlando = false;
 let ultimoSuono = 0;
 let inizioDiscorso = 0;
 let rumore = 0.004;
+let rumoreAppreso = 0;    // livello dei falsi allarmi: riscende piano (~3 minuti)
 let attesaInvio = false;
 let filaForte = 0;        // fotogrammi di fila sopra la soglia (128 ms l'uno)
 let voceVera = false;     // nel discorso c'e' un suono continuo, non solo clic
@@ -426,7 +427,8 @@ function esaminaMicrofono(dati) {
   }
 
   livelloMicrofono += (Math.min(1, rms * 6) - livelloMicrofono) * 0.35;
-  const soglia = Math.max(0.011, rumore * 3);
+  rumoreAppreso *= 0.9995; // circa 8 fotogrammi al secondo
+  const soglia = Math.max(0.011, rumore * 3, rumoreAppreso * 3);
 
   if (!parlando && rms < soglia) {
     rumore = rumore * 0.98 + rms * 0.02; // impara il rumore di fondo
@@ -552,9 +554,9 @@ async function inviaDiscorso(pezzi) {
       let somma = 0;
       for (const pezzo of pezzi) for (let i = 0; i < pezzo.length; i++) somma += pezzo[i] * pezzo[i];
       const livello = Math.sqrt(somma / campioni);
-      const prima = rumore;
-      rumore = Math.min(0.012, Math.max(rumore, livello * 0.6));
-      if (rumore > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumore.toFixed(4));
+      const prima = rumoreAppreso;
+      rumoreAppreso = Math.min(0.012, Math.max(rumoreAppreso, livello * 0.6));
+      if (rumoreAppreso > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumoreAppreso.toFixed(4));
       impostaFase("ascolto");
       return;
     }

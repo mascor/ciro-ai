@@ -732,6 +732,13 @@ class Cervello:
                 lettera = "S" if lettera == "si" else "N"
             elif lettera == "si" and opzioni == OPZIONI_DEPLOY_PROVA:
                 lettera = "A"  # «sì» a un deploy di prova: autorizza questa volta
+            elif lettera == "si" and scheda.get("raccomanda") in opzioni:
+                # Ciro ha detto «Consiglia X»: «sì» accetta il consiglio, e lo dice
+                esito = self._manda(scheda, scheda["raccomanda"], testo)
+                if esito["mandato"]:
+                    esito["risposta"] = "Mandato: %s." % scheda["raccomanda"]
+                    self.storico[-1] = ("faccia", esito["risposta"])
+                return esito
             else:
                 return self._detto(testo, "Rispondi con %s." % ", ".join(opzioni), False)
         if lettera not in opzioni:
