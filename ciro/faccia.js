@@ -892,7 +892,10 @@ function disegnaPausa(pausa) {
   pulsantePausa.classList.toggle("attiva", attiva);
   pulsantePausa.setAttribute("aria-pressed", String(attiva));
   const tranne = attiva && pausa.solo && pausa.solo.length ? " tranne " + pausa.solo.join(", ") : "";
-  pulsantePausa.textContent = attiva ? "Progetti in pausa" + tranne : "Progetti attivi";
+  pulsantePausa.textContent = attiva ? "▶ Riprendi progetti" + (tranne ? " (attivi:" + tranne.replace(" tranne", "") + ")" : "")
+                                     : "⏸ Pausa progetti";
+  pulsantePausa.title = attiva ? "Progetti in pausa: Ciro non annuncia le sessioni. Premi per riprendere."
+                               : "Ciro smette di annunciare le domande delle sessioni (restano nel pannello)";
 }
 pulsantePausa.addEventListener("click", async () => {
   const attiva = !pulsantePausa.classList.contains("attiva");
