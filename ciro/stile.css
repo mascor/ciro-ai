@@ -21,8 +21,9 @@ html, body {
 }
 
 #scena {
-  --fascia: clamp(340px, 34vw, 500px);
-  --destra: clamp(280px, 24vw, 420px);
+  /* 19/11/2026: colonna sinistra (sessioni e account) stretta, destra («Ti aspettano») larga */
+  --fascia: clamp(280px, 24vw, 420px);
+  --destra: clamp(340px, 34vw, 500px);
   position: fixed;
   inset: 0;
   padding-left: var(--fascia);
@@ -910,3 +911,107 @@ button {
 /* messaggi di Google Chat in «Ti aspettano»: urgenti in evidenza */
 .attesa.chat { border-left-color: #5aa9e6; cursor: default; }
 .attesa.chat.urgente { border-left-color: #f0606a; background: rgba(240, 96, 106, .10); }
+
+
+/* ------------------------------------------------------------------
+   19/11/2026: colonne scambiate (scelta dell'utente, proposta in OpenDesign).
+   #pannello = «Ti aspettano», a destra e largo; #pannello-destra = sessioni e
+   account, a sinistra. Gli id restano quelli di prima per non toccare il resto. */
+#pannello {
+  left: auto;
+  right: 0;
+  width: var(--destra);
+  border-right: 0;
+  border-left: 1px solid rgba(255, 255, 255, .08);
+  padding-top: var(--sotto-comandi, 76px);
+  padding-bottom: 84px;   /* il pulsante «A» della chat scritta sta in basso a destra */
+}
+#pannello-destra {
+  right: auto;
+  left: 0;
+  width: var(--fascia);
+  border-left: 0;
+  border-right: 1px solid rgba(255, 255, 255, .08);
+  padding-top: 24px;
+  padding-bottom: 18px;
+}
+#pannello > h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--testo-tenue);
+}
+#pannello-destra h2.secondo { margin: 14px 0 12px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .08); }
+#pannello-destra #pannello-consumi { flex: 0 0 auto; }
+#pannello-attese { overflow-y: auto; scrollbar-width: thin; }
+
+/* gruppi: domande delle sessioni (tutte oro) e Google Chat (un colore per casella) */
+#pannello-attese .gruppo {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0 8px;
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--testo-tenue);
+  cursor: default;
+}
+#pannello-attese .gruppo + .gruppo, #pannello-attese .attesa + .gruppo, #pannello-attese .casella + .gruppo { margin-top: 14px; }
+#pannello-attese .gruppo span:last-child { padding-right: 6px; }
+.attesa.posta { border-left-color: #f5c451; background: rgba(245, 196, 81, .07); }
+.casella {
+  --c: 139, 124, 246;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(var(--c), .06);
+  border: 1px solid rgba(var(--c), .25);
+  border-left: 4px solid rgb(var(--c));
+  cursor: default;
+}
+.casella-testa {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  font-size: 13px;
+  background: rgba(var(--c), .14);
+  border-bottom: 1px solid rgba(var(--c), .2);
+}
+.casella-testa .pallino-casella { width: 9px; height: 9px; border-radius: 50%; background: rgb(var(--c)); flex: none; }
+.casella-testa .mail { font-weight: 600; color: rgb(var(--c)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.casella-testa .conta { margin-left: auto; opacity: .6; white-space: nowrap; }
+.casella-testa .avviso { margin-left: auto; color: #ff6b6b; font-weight: 600; white-space: nowrap; }
+.messaggio {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2px 8px;
+  align-items: baseline;
+  padding: 7px 11px;
+  border-top: 1px solid rgba(255, 255, 255, .04);
+}
+.casella-testa + .messaggio { border-top: 0; }
+.messaggio .numero-domanda { color: rgb(var(--c)); border-color: rgba(var(--c), .5); }
+.messaggio .chi { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.messaggio .quando { font-size: 12px; opacity: .55; white-space: nowrap; }
+/* il testo si legge (fino a 3 righe): serve per capire se e' urgente */
+.messaggio .testo { grid-column: 2 / 4; font-size: 14px; line-height: 1.35; opacity: .92; white-space: normal;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.messaggio .motivo { grid-column: 2 / 4; font-size: 12px; opacity: .55; font-style: italic; white-space: normal; }
+.messaggio.urgente .chi::after {
+  content: attr(data-urgente);
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 107, 107, .6);
+  border-radius: 5px;
+}
+.spazi-chiusi { padding: 7px 11px; font-size: 13px; opacity: .75; cursor: pointer; border-top: 1px solid rgba(255, 255, 255, .04); }
+.casella-testa + .spazi-chiusi { border-top: 0; }
+.spazi-chiusi b { font-weight: 600; }
+/* i simboli del sonno restano nella zona di Ciro, non sopra le colonne */
+#sogni { left: var(--fascia); right: var(--destra); z-index: 0; }

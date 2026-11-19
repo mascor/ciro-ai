@@ -49,14 +49,17 @@ const FRASI_RICHIAMO = [
 // parlato (o dopo il suo nome) la conversazione resta aperta 15 secondi.
 // Il pulsante «Ascolto» passa a «sempre in ascolto», come prima.
 const FINESTRA_CONVERSAZIONE = 15000;
+// dopo una domanda di Ciro («Come rispondo?», «Confermi?») serve tempo per pensare
+const FINESTRA_DOMANDA = 60000;
+let ultimaFraseDetta = "";
 let modoAscolto = "nome";   // "nome" | "sempre"
 try { if (localStorage.getItem("ciro-ascolto") === "sempre") modoAscolto = "sempre"; } catch (errore) { /* resta "nome" */ }
 let finestraFino = 0;
 function serveNome() {
   return modoAscolto === "nome" && !calibrando && performance.now() > finestraFino;
 }
-function apriFinestra() {
-  finestraFino = performance.now() + FINESTRA_CONVERSAZIONE;
+function apriFinestra(durata = FINESTRA_CONVERSAZIONE) {
+  finestraFino = Math.max(finestraFino, performance.now() + durata);
   aggiornaStatoAscolto();
 }
 function aggiornaStatoAscolto() {
@@ -255,12 +258,14 @@ function di(testo) {
 async function prossimo() {
   if (!coda.length) {
     inCorso = false;
-    if (sveglia) apriFinestra();   // ha appena parlato: puoi rispondere senza «Ciro»
+    // ha appena parlato: puoi rispondere senza «Ciro» (un minuto se ha fatto una domanda)
+    if (sveglia) apriFinestra(/\?\s*$/.test(ultimaFraseDetta) ? FINESTRA_DOMANDA : FINESTRA_CONVERSAZIONE);
     if (fase === "parlo") impostaFase(micAttivo ? "ascolto" : "pronto");
     return;
   }
   inCorso = true;
   const voce = coda.shift();
+  ultimaFraseDetta = voce.testo || "";
   if (!voce.audio) voce.audio = caricaVoce(voce.testo);
   if (coda.length && !coda[0].audio) coda[0].audio = caricaVoce(coda[0].testo); // la prossima, intanto
   try {
@@ -834,7 +839,124 @@ function testoAttesa(secondi) {
   return ore < 24 ? T("da %d h %d min", ore, minuti % 60) : T("da %d g", Math.floor(ore / 24));
 }
 
+// 19/11/2026 (proposta in OpenDesign): due gruppi. Le domande delle sessioni
+// (Claude Code, OpenCode) tutte dello stesso colore; Google Chat con una scheda
+// per casella, ognuna con il suo colore fisso, una riga per messaggio e gli
+// spazi non urgenti compressi in una riga.
+const COLORI_CASELLE = ["139, 124, 246", "52, 211, 153", "96, 165, 250", "244, 114, 182", "45, 212, 191", "251, 146, 60"];
+const spaziAperti = new Set();   // caselle con gli spazi mostrati per intero (clic)
+function coloreCasella(account) {
+  let h = 0;
+  for (const c of String(account || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return COLORI_CASELLE[h % COLORI_CASELLE.length];
+}
+
+function gruppo(titolo, quanti) {
+  const li = document.createElement("li");
+  li.className = "gruppo";
+  const a = document.createElement("span");
+  a.textContent = titolo;
+  const b = document.createElement("span");
+  b.textContent = String(quanti);
+  li.append(a, b);
+  return li;
+}
+
+function numeroDi(attesa) {
+  const numero = document.createElement("span");
+  numero.className = "numero-domanda";
+  numero.textContent = "#" + attesa.numero;
+  return numero;
+}
+
+function rigaMessaggio(attesa) {
+  const riga = document.createElement("div");
+  riga.className = "messaggio" + (attesa.urgente ? " urgente" : "");
+  riga.title = attesa.motivo || attesa.testo || "";
+  const chi = document.createElement("span");
+  chi.className = "chi";
+  chi.textContent = attesa.mittente || "?";
+  if (attesa.urgente) chi.dataset.urgente = T("urgente");
+  const quando = document.createElement("span");
+  quando.className = "quando";
+  quando.textContent = testoAttesa(attesa.secondi);
+  const testo = document.createElement("span");
+  testo.className = "testo";
+  testo.textContent = attesa.testo || "";
+  riga.append(attesa.numero ? numeroDi(attesa) : document.createElement("span"), chi, quando, testo);
+  if (attesa.motivo) {   // il giudizio del modello: perche' e' (o non e') urgente
+    const motivo = document.createElement("span");
+    motivo.className = "motivo";
+    motivo.textContent = attesa.motivo;
+    riga.appendChild(motivo);
+  }
+  return riga;
+}
+
+function disegnaCaselle(chat) {
+  const perCasella = new Map();
+  for (const attesa of chat) {
+    const casella = attesa.account || "?";
+    if (!perCasella.has(casella)) perCasella.set(casella, []);
+    perCasella.get(casella).push(attesa);
+  }
+  for (const [casella, voci] of perCasella) {
+    const scheda = document.createElement("li");
+    scheda.className = "casella";
+    scheda.style.setProperty("--c", coloreCasella(casella));
+    const testa = document.createElement("div");
+    testa.className = "casella-testa";
+    const pallino = document.createElement("span");
+    pallino.className = "pallino-casella";
+    const mail = document.createElement("span");
+    mail.className = "mail";
+    mail.textContent = casella;
+    testa.append(pallino, mail);
+    const fallita = voci.find((v) => String(v.chat_id || "").startsWith("lettura|"));
+    const messaggi = voci.filter((v) => !String(v.chat_id || "").startsWith("lettura|"));
+    // in cima gli urgenti, poi i messaggi diretti; gli spazi non urgenti in una riga
+    const diretti = messaggi.filter((v) => v.diretto || v.urgente)
+      .sort((a, b) => Number(Boolean(b.urgente)) - Number(Boolean(a.urgente)));
+    const spazi = messaggi.filter((v) => !v.diretto && !v.urgente);
+    const info = document.createElement("span");
+    if (fallita) {
+      info.className = "avviso";
+      info.textContent = T("Lettura non riuscita");
+    } else {
+      info.className = "conta";
+      const parti = [];
+      if (diretti.length) parti.push(T(diretti.length === 1 ? "%d non letto" : "%d non letti", diretti.length));
+      if (spazi.length) parti.push(T(spazi.length === 1 ? "%d spazio" : "%d spazi", spazi.length));
+      info.textContent = parti.join(" · ");
+    }
+    testa.appendChild(info);
+    scheda.appendChild(testa);
+    if (fallita) {
+      const nota = document.createElement("div");
+      nota.className = "spazi-chiusi";
+      nota.textContent = fallita.testo || "";
+      scheda.appendChild(nota);
+    }
+    for (const attesa of diretti) scheda.appendChild(rigaMessaggio(attesa));
+    if (spazi.length && spaziAperti.has(casella)) {
+      for (const attesa of spazi) scheda.appendChild(rigaMessaggio(attesa));
+    } else if (spazi.length) {
+      const chiusi = document.createElement("div");
+      chiusi.className = "spazi-chiusi";
+      const quanti = document.createElement("b");
+      quanti.textContent = "▸ " + T(spazi.length === 1 ? "%d spazio" : "%d spazi", spazi.length);
+      chiusi.append(quanti, " " + T("con messaggi non letti: %s", spazi.map((v) => v.mittente || "?").join(", ")));
+      chiusi.title = T("Clicca per vederli");
+      chiusi.addEventListener("click", () => { spaziAperti.add(casella); disegnaAttese(ultimeAttese); });
+      scheda.appendChild(chiusi);
+    }
+    pannelloAttese.appendChild(scheda);
+  }
+}
+
+let ultimeAttese = [];
 function disegnaAttese(elenco) {
+  ultimeAttese = elenco;
   pannelloAttese.innerHTML = "";
   contaAttese.textContent = elenco.length ? `(${elenco.length})` : "";
   if (!elenco.length) {
@@ -844,6 +966,24 @@ function disegnaAttese(elenco) {
     pannelloAttese.appendChild(vuoto);
     return;
   }
+  const chat = elenco.filter((a) => a.tipo === "chat");
+  const sessioni = elenco.filter((a) => a.tipo !== "chat");
+  // i messaggi di Chat urgenti (giudicati da DeepSeek) stanno in cima, gia' aperti
+  const urgenti = chat.filter((a) => a.urgente);
+  const altri = chat.filter((a) => !a.urgente);
+  if (urgenti.length) {
+    pannelloAttese.appendChild(gruppo(T("Urgenti in Google Chat"), urgenti.length));
+    disegnaCaselle(urgenti);
+  }
+  if (sessioni.length) pannelloAttese.appendChild(gruppo(T("Domande delle sessioni"), sessioni.length));
+  disegnaDomande(sessioni);
+  if (altri.length) {
+    pannelloAttese.appendChild(gruppo("Google Chat", altri.filter((a) => !String(a.chat_id || "").startsWith("lettura|")).length));
+    disegnaCaselle(altri);
+  }
+}
+
+function disegnaDomande(elenco) {
   for (const attesa of elenco) {
     const riga = document.createElement("li");
     const diChat = attesa.tipo === "chat";
@@ -863,7 +1003,8 @@ function disegnaAttese(elenco) {
       progetto.prepend(numero);
     }
     const quando = document.createElement("span");
-    const dove = diChat ? "Chat " + String(attesa.account || "").split("@").pop() : T(attesa.tipo);
+    // la casella intera: con piu' profili si capisce dove e' arrivato
+    const dove = diChat ? "Chat " + String(attesa.account || "") : T(attesa.tipo);
     quando.textContent = `${dove} · ${testoAttesa(attesa.secondi)}`;
     testa.append(progetto, quando);
     const testo = document.createElement("p");
@@ -1047,19 +1188,17 @@ pulsanteLingua.addEventListener("click", async () => {
   aggiornaQuadro();
 });
 
-// Pannello sinistro in una schermata, senza scorrere: prima rimpicciolisco i
-// consumi (fino al 55%), poi anche «Ti aspettano» (fino al 70%).
-const pannelloSinistro = document.getElementById("pannello");
+// 19/11/2026: «Ti aspettano» (a destra) scorre da solo. A sinistra sessioni e
+// consumi stanno in una schermata: se le sessioni restano con meno del 40% della
+// colonna, rimpicciolisco i consumi (fino al 60%); poi adattaSessioni fa il resto.
 function adattaPannello() {
   const consumi = document.getElementById("pannello-consumi");
-  const attese = document.getElementById("pannello-attese");
+  const colonna = document.getElementById("pannello-destra");
   consumi.style.zoom = "";
-  attese.style.zoom = "";
-  // «Ti aspettano» prende lo spazio che resta e taglia cio' che non ci sta
-  const entra = () => pannelloSinistro.scrollHeight <= pannelloSinistro.clientHeight + 1 &&
-    attese.scrollHeight <= attese.clientHeight + 1;
-  for (let z = 1; z >= 0.55 && !entra(); z -= 0.05) consumi.style.zoom = z.toFixed(2);
-  for (let z = 1; z >= 0.7 && !entra(); z -= 0.05) attese.style.zoom = z.toFixed(2);
+  for (let z = 1; z >= 0.6 && pannelloSessioni.clientHeight < colonna.clientHeight * 0.4; z -= 0.05) {
+    consumi.style.zoom = z.toFixed(2);
+  }
+  adattaSessioni();
 }
 window.addEventListener("resize", adattaPannello);
 
@@ -1192,7 +1331,8 @@ function disegnaConsumi(elenco) {
     titolo.append(nome, eta);
     blocco.appendChild(titolo);
 
-    for (const voce of consumo.voci || []) {
+    // 19/11/2026: solo la sessione di 5 ore (Claude, OpenCode Go) e il credito di DeepSeek
+    for (const voce of (consumo.voci || []).filter((v) => v.nome === "5 ore")) {
       const riga = document.createElement("div");
       riga.className = "barra-consumo";
       const etichetta = document.createElement("span");
@@ -1216,7 +1356,7 @@ function disegnaConsumi(elenco) {
       riga.append(etichetta, traccia, valore, reset);
       blocco.appendChild(riga);
     }
-    if (consumo.saldo) {
+    if (consumo.saldo && consumo.fonte === "deepseek") {
       const saldo = document.createElement("div");
       saldo.className = "voce";
       const etichetta = document.createElement("span");
@@ -1225,12 +1365,6 @@ function disegnaConsumi(elenco) {
       valore.textContent = consumo.saldo;
       saldo.append(etichetta, valore);
       blocco.appendChild(saldo);
-    }
-    if (consumo.nota) {
-      const nota = document.createElement("div");
-      nota.className = "voce tenue";
-      nota.textContent = consumo.nota;
-      blocco.appendChild(nota);
     }
     pannelloConsumi.appendChild(blocco);
   }

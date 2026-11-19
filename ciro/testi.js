@@ -111,6 +111,17 @@ const EN_UI = {
   "Salvo…": "Saving…",
   "Non salvata: %s. Riscrivila.": "Not saved: %s. Type it again.",
   "Il server non risponde. Riscrivila.": "The server is not answering. Type it again.",
+  // waiting list in groups (19/11/2026)
+  "Domande delle sessioni": "Session questions",
+  "Urgenti in Google Chat": "Urgent in Google Chat",
+  "%d non letto": "%d unread",
+  "%d non letti": "%d unread",
+  "%d spazio": "%d space",
+  "%d spazi": "%d spaces",
+  "con messaggi non letti: %s": "with unread messages: %s",
+  "Clicca per vederli": "Click to show them",
+  "urgente": "urgent",
+  "Lettura non riuscita": "Read failed",
 };
 
 // T("da %d min", 5): translation, then %s/%d replaced in order

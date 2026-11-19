@@ -207,6 +207,20 @@ class TestChatSicura(BaseRisposte):
         self.arriva([], account="home@example.com")                 # read again: zero messages
         self.assertEqual(self.lettura_non_riuscita(), [])
 
+    def test_profilo_che_tace_non_resta_in_errore(self):
+        self.chat.lettura_fallita("home@example.com", adesso=time.time() - modulo_chat.FALLITA_DOPO - 5)
+        self.assertIn("home@example.com", self.chat.letture_fallite())
+        self.assertEqual(self.chat.letture_fallite(adesso=time.time() + modulo_chat.ASSENTE + 1), {})
+
+    def test_cornice_di_chat_dentro_gmail_non_e_un_errore(self):
+        server.ricevi_chat({"account": "work@example.com", "conversazioni": None,
+                            "diagnosi": {"cornice": "interna"}}, in_sottofondo=False)
+        self.assertEqual(self.chat.letture_fallite(adesso=time.time() + modulo_chat.FALLITA_DOPO + 1), {})
+        server.ricevi_chat({"account": "work@example.com", "conversazioni": None,
+                            "diagnosi": {"cornice": "principale"}}, in_sottofondo=False)
+        self.assertIn("work@example.com",
+                      self.chat.letture_fallite(adesso=time.time() + modulo_chat.FALLITA_DOPO + 1))
+
     def test_impostazione_niente_messaggi_al_modello(self):
         modulo_cervello.imposta("chat_al_modello", False)
         self.arriva([DIRETTA])

@@ -34,6 +34,14 @@ class TestNome(unittest.TestCase):
         self.assertEqual(server.togli_nome("Ehi tiro, come stanno le sessioni"),
                          (True, "come stanno le sessioni"))
 
+    def test_nome_storpiato_all_inizio_di_una_frase(self):
+        # 19/11/2026: whisper wrote «Eishiro, uno, due.» and Ciro ignored the answer
+        for detto, resto in (("Eishiro, uno, due.", "uno, due"), ("Ei shiro, tre sì", "tre sì"),
+                             ("Eiciro cosa mi sono perso", "cosa mi sono perso")):
+            self.assertEqual(server.togli_nome(detto), (True, resto), detto)
+        for detto in ("Eccomi, uno due", "Hey, Siri, apri", "Esempio di frase lunga", "Hai, che bravo?"):
+            self.assertFalse(server.togli_nome(detto)[0], detto)
+
     def test_non_chiamato(self):
         for detto in ("PIP PIP PIP PIP", "come stanno le sessioni", "tre, sì", "giro di prova", "zero",
                       "e poi", "il giro del mondo in ottanta giorni",

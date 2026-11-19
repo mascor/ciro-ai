@@ -20,7 +20,9 @@ PROMEMORIA = 15 * 60       # urgent and unanswered: reminded every 15 minutes
 FALLITA_DOPO = 2 * 60      # a profile whose Chat list is not found for 2 minutes: shown as a failed read
 
 _TECNICHE = re.compile(
-    r"^(?:\d{1,2}[:.]\d{2}|\d+|unread|non lett\w*|oggi|ieri|today|yesterday|"
+    r"^(?:\d{1,2}[:.]\d{2}(?:\s*[ap]\.?\s?m\.?)?|\d+|unread|non lett\w*|oggi|ieri|today|yesterday|now|adesso|ora|"
+    r"da leggere|thread|thread\b.*|risposte e messaggi da leggere|replies and messages to read|"
+    r"(?:unread|new)\s+(?:messages?|replies|thread)\b.*|\d+\s+(?:new|nuov\w+|non lett\w+).*|"
     r"lun|mar|mer|gio|ven|sab|dom|mon|tue|wed|thu|fri|sat|sun|"
     r"\d{1,2}\s+\w{3,9}(?:\s+\d{4})?|\w{3,9}\s+\d{1,2}(?:,\s*\d{4})?|"
     r"(?:attivato da|activated by|anche|also)\b.*)$", re.I)
@@ -115,6 +117,7 @@ class Chat:
                 if vecchia and vecchia.get("testo") == testo:
                     continue
                 voce = {"chiave": chiave, "account": account, "conversazione": ident,
+                        "righe": [str(r)[:200] for r in (conv.get("righe") or [])][:12],   # local only: to improve estrai
                         "diretto": ident.startswith("dm/"), "nome": nome, "testo": testo,
                         "visto": adesso, "urgente": None, "risposta": None, "motivo": ""}
                 dati["conversazioni"][chiave] = voce
@@ -144,7 +147,10 @@ class Chat:
         """{account: seconds since the reads started failing}, only past FALLITA_DOPO."""
         adesso = time.time() if adesso is None else adesso
         fallite = {}
-        for account, lettura in self._leggi()["letture"].items():
+        dati = self._leggi()
+        for account, lettura in dati["letture"].items():
+            if adesso - dati["account"].get(account, 0) > ASSENTE:
+                continue   # silent profile (tab closed, or now seen under another name): not a failed read
             if not lettura.get("ok", True) and lettura.get("dal") and adesso - lettura["dal"] >= FALLITA_DOPO:
                 fallite[account] = int(adesso - lettura["dal"])
         return fallite

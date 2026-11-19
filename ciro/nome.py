@@ -15,6 +15,7 @@ import cervello
 NOME_RE = re.compile(r"^\W*(?:(?:ehi|ehy|hey|ei|ok|okay|oh)\W+)?(?:ciro|kiro|chiro|cyro|ciroo|cirò)\b'?[\s,.:;!?]*", re.I)
 NOME_DOPO_EHI_RE = re.compile(r"^\W*(?:ehi|ehy|hey|hei|ei|eh|e)\W+(?:il\W+)?(?:tiro|giro|siro|piro|ciro|kiro|chiro)\b'?[\s,.:;!?]*", re.I)
 CHIAMATE = ("ehiciro", "heyciro", "eiciro", "okciro", "ciro")
+CHIAMATE_EHI = ("ehiciro", "heyciro", "eiciro", "okciro")   # long enough for a sound-alike at the start
 # never learned as a name: answers and short words said to Ciro anyway
 MAI_NOME = {"si", "sì", "no", "uno", "due", "tre", "ok", "okay", "grazie", "yes", "one", "two", "three",
             "basta", "stop", "fermati", "annulla"}
@@ -62,6 +63,12 @@ def togli_nome(testo):
     for quante in (3, 2, 1):   # a learned variant at the start
         if len(parole) >= quante and compatta(" ".join(parole[:quante])) in apprese:
             return True, " ".join(parole[quante:]).strip()
+    # «Eishiro, uno, due»: the first word (or two) sounds like «Ehi Ciro», the rest is the request
+    for quante in (2, 1):
+        if len(parole) > quante:
+            forma = compatta(" ".join(parole[:quante]))
+            if len(forma) >= 5 and "siri" not in forma and min(_distanza(forma, c) for c in CHIAMATE_EHI) <= 2:
+                return True, " ".join(parole[quante:]).strip(" ,.:;!?")
     # only the name, said badly: up to 3 words that sound like «Ehi Ciro»
     if 0 < len(parole) <= 3:
         forma = compatta(testo)
