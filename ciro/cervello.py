@@ -941,7 +941,8 @@ class Cervello:
         return self._detto(testo, self._quale_domanda(), False)
 
     def _quale_domanda(self):
-        aperte = self.numeri.elenco()
+        # solo le domande delle sessioni: un messaggio di Chat non si risponde per numero
+        aperte = [v for v in self.numeri.elenco() if not str(v.get("chiave", "")).startswith("chat|")]
         if not aperte:
             return t("Per quale progetto?")
         return t("Quale domanda? %s.") % "; ".join(

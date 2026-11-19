@@ -224,6 +224,8 @@ class TestChatSicura(BaseRisposte):
         self.assertFalse(esito["mandato"])
         self.assertIn("messaggio di Chat", esito["risposta"])
         self.assertEqual(self.messaggi_a("chat"), [])
+        esito = self.c.chiedi("sette, sì")                       # no such question: Chat not listed
+        self.assertNotIn("chat", esito["risposta"].lower())
 
     def test_profilo_che_tace_non_mostra_messaggi_vecchi(self):
         self.arriva([DIRETTA])
