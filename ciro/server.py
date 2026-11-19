@@ -171,6 +171,9 @@ def chiave_deepseek():
     """Chiave delle API DeepSeek, se c'e' sul Mac."""
     if os.environ.get("DEEPSEEK_API_KEY"):
         return os.environ["DEEPSEEK_API_KEY"].strip()
+    dal_portachiavi = modulo_cervello._chiave_deepseek()   # servizio ciro-deepseek
+    if dal_portachiavi:
+        return dal_portachiavi
     for percorso in (Path.home() / ".deepseek-key",
                      Path.home() / ".config/deepseek/key",
                      Path.home() / ".config/deepseek/api-key"):

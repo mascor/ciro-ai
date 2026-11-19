@@ -56,6 +56,63 @@ def e_conferma(detto):
 NO_RE = re.compile(r"^(no|annulla|lascia stare|non mandarlo|ferma|aspetta)\b")
 
 
+# ----------------------------------------------------------- modello
+# DeepSeek chiamato direttamente (circa 1 s in meno di "opencode run"); se manca
+# la chiave o la chiamata fallisce, si torna a OpenCode. La chiave viene dal
+# Portachiavi (servizio ciro-deepseek) o da DEEPSEEK_API_KEY e non va mai
+# negli argomenti, nei log o nella conversazione.
+DEEPSEEK_URL = os.environ.get("CIRO_DEEPSEEK_URL") or "https://api.deepseek.com/chat/completions"
+MODELLO_DIRETTO = os.environ.get("CIRO_MODELLO_DIRETTO") or "deepseek-chat"
+_chiave_cache = {"valore": None, "letta": 0.0}
+
+
+def _chiave_deepseek():
+    if os.environ.get("CIRO_DEEPSEEK_DIRETTO") == "0":
+        return None
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return os.environ["DEEPSEEK_API_KEY"].strip()
+    if time.time() - _chiave_cache["letta"] < 300:
+        return _chiave_cache["valore"]
+    valore = None
+    try:
+        esito = subprocess.run(["security", "find-generic-password", "-s", "ciro-deepseek", "-w"],
+                               capture_output=True, text=True, timeout=5)
+        if esito.returncode == 0:
+            valore = esito.stdout.strip() or None
+    except (OSError, subprocess.TimeoutExpired):
+        valore = None
+    _chiave_cache.update({"valore": valore, "letta": time.time()})
+    return valore
+
+
+def _deepseek_diretto(prompt, timeout):
+    chiave = _chiave_deepseek()
+    if not chiave:
+        return None
+    import urllib.request
+    corpo = json.dumps({"model": MODELLO_DIRETTO, "temperature": 0.3, "max_tokens": 800,
+                        "messages": [{"role": "user", "content": prompt}]}).encode("utf-8")
+    richiesta = urllib.request.Request(DEEPSEEK_URL, data=corpo, method="POST", headers={
+        "Authorization": "Bearer " + chiave, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(richiesta, timeout=timeout) as risposta:
+            dati = json.load(risposta)
+        return (dati["choices"][0]["message"]["content"] or "").strip() or None
+    except Exception as errore:  # noqa: BLE001
+        # solo il tipo e il codice HTTP: il messaggio potrebbe contenere dati della richiesta
+        registra({"ora": time.strftime("%Y-%m-%d %H:%M:%S"), "tipo": "errore-deepseek",
+                  "errore": type(errore).__name__, "codice": getattr(errore, "code", None)})
+        return None
+
+
+def chiedi_modello(prompt, timeout):
+    """(uscita, errore, codice) come _esegui: prima DeepSeek diretto, poi OpenCode."""
+    testo = _deepseek_diretto(prompt, min(timeout, 30))
+    if testo:
+        return testo, "", 0
+    return _esegui(["opencode", "run", "-m", MODELLO, "--archived", "--title", "faccia", prompt], timeout)
+
+
 def _esegui(comando, timeout):
     esito = subprocess.run(
         comando,
@@ -348,8 +405,7 @@ Richiesta:
 def domanda_per_voce(testo):
     """Versione parlabile e breve di una domanda lunga (vuota se il modello non risponde)."""
     try:
-        uscita, _, codice = _esegui(["opencode", "run", "-m", MODELLO, "--archived",
-                                     "--title", "faccia", PROMPT_PER_VOCE + testo[:3000]], 60)
+        uscita, _, codice = chiedi_modello(PROMPT_PER_VOCE + testo[:3000], 60)
     except Exception:  # noqa: BLE001
         return ""
     if codice != 0:
@@ -448,8 +504,7 @@ class Cervello:
     def chiedi_preferenze(self, prompt):
         """Il modello valuta se una preferenza salvata copre una domanda
         (lo usa solo il coordinatore, in sottofondo)."""
-        uscita, errore, codice = _esegui(["opencode", "run", "-m", MODELLO, "--archived",
-                                          "--title", "faccia", prompt], 30)
+        uscita, errore, codice = chiedi_modello(prompt, 30)
         if codice != 0:
             raise RuntimeError((errore or "errore del modello")[-200:])
         return uscita
@@ -750,8 +805,7 @@ class Cervello:
         testo += ["%s: %s" % (NOME_UTENTE if c == "io" else "Ciro", t) for c, t in vecchie]
         nuovo = ""
         try:
-            uscita, _, codice = _esegui(["opencode", "run", "-m", MODELLO, "--archived",
-                                         "--title", "faccia", "\n".join(testo)], 120)
+            uscita, _, codice = chiedi_modello("\n".join(testo), 120)
             if codice == 0:
                 nuovo = self._pulisci(uscita)[:RIASSUNTO_MASSIMO]
         except Exception:  # noqa: BLE001
@@ -896,9 +950,8 @@ class Cervello:
 
         self.storico.append(("io", testo))
         try:
-            uscita, errore, codice = _esegui(
-                ["opencode", "run", "-m", MODELLO, "--archived",
-                 "--title", "faccia", self._prompt(testo)],
+            uscita, errore, codice = chiedi_modello(
+                self._prompt(testo),
                 120,
             )
         except subprocess.TimeoutExpired:
