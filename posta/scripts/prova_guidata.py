@@ -85,6 +85,23 @@ def pausa(porta, attiva, solo):
         return json.load(risposta)
 
 
+def guida(porta, frase):
+    """Ciro tells the user what to do next (an external message: not paused)."""
+    corpo = json.dumps({"testo": frase, "da": "prova"}).encode()
+    richiesta = urllib.request.Request("http://127.0.0.1:%d/api/messaggio" % porta, data=corpo, method="POST",
+                                       headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(richiesta, timeout=5).close()
+    except OSError:
+        pass
+
+
+def aspetta_detto(dal, frase, secondi):
+    """Waits until Ciro has spoken `frase` (so the next step does not talk over it)."""
+    return aspetta(lambda: any(v.get("tipo") == "parla" and frase in (v.get("testo") or "")
+                               for v in righe_registro(dal)), secondi)
+
+
 def consegna(casella, identificativo):
     """The fake session reads the answer like a real one: recepita, then risolta."""
     risposte = messaggi(casella, identificativo)
@@ -123,6 +140,10 @@ def main(argv=None):
     pausa(args.porta, True, ["prova-ciro", "prova-due"])
     print("pausa attiva tranne prova-ciro e prova-due; inizio %s" % inizio, flush=True)
 
+    guida(args.porta, "Inizia la prova guidata. Passo uno: rispondi A alla domanda che arriva.")
+    aspetta_detto(inizio, "Passo uno", 30)
+    time.sleep(1)
+
     # 1. one question, answer «A»
     t0 = time.time()
     q1 = chiedi("prova-ciro", "Prova 1", "Prova uno: procedo?")
@@ -136,12 +157,19 @@ def main(argv=None):
         esito(1, False, "nessuna risposta in %.0f s" % args.attesa)
 
     # 2. correction «rispondi B»
+    if arrivata:
+        time.sleep(2)
+        guida(args.porta, "Passo due: adesso di' rispondi B.")
     correzione = aspetta(lambda: messaggi("prova-ciro", q1, correzione=True), 120) if arrivata else None
     esito(2, bool(correzione) and correzione[0].get("CORREZIONE") == "B",
           "correzione %s" % (correzione[0].get("CORREZIONE") if correzione else "non arrivata in 120 s"))
 
     # 3. two questions together
-    time.sleep(3)
+    time.sleep(4)
+    dal = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guida(args.porta, "Passo tre: arrivano due domande. Rispondi A, poi di' prova due, poi B per prova ciro.")
+    aspetta_detto(dal, "Passo tre", 30)
+    time.sleep(1)
     q2 = chiedi("prova-ciro", "Prova 3a", "Prova tre, prima domanda: procedo?")
     q3 = chiedi("prova-due", "Prova 3b", "Prova tre, seconda domanda: procedo?")
     t3 = time.time()
@@ -156,18 +184,26 @@ def main(argv=None):
     esito("3c", chiese, "Ciro ha chiesto «Per quale progetto?»" if chiese else "non ha chiesto il progetto")
 
     # 4. free question
+    time.sleep(3)
     dal = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guida(args.porta, "Passo quattro: chiedimi come stanno le sessioni.")
     libera = aspetta(lambda: risposta_ciro(dal, lambda v: "session" in (v.get("tu") or "").lower()), 120)
     esito(4, bool(libera and libera.get("ciro")),
           ("«%s» in %.1f s" % ((libera.get("ciro") or "")[:90], libera.get("secondi") or 0)) if libera
           else "nessuna domanda sulle sessioni in 120 s")
 
     # 5. resume the projects
+    time.sleep(3)
     dal = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    guida(args.porta, "Passo cinque: di' riprendi i progetti.")
     ripresa = aspetta(lambda: risposta_ciro(dal, lambda v: (v.get("ciro") or "").startswith("Progetti ripresi")), 120)
     if not ripresa:
         pausa(args.porta, False, [])
     esito(5, bool(ripresa), "pausa tolta a voce" if ripresa else "pausa tolta dallo script (comando non sentito)")
+
+    time.sleep(6)
+    riusciti = sum(1 for _, ok, _ in esiti if ok)
+    guida(args.porta, "Prova finita: %d passi su %d riusciti." % (riusciti, len(esiti)))
 
     # report
     fine = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
