@@ -23,8 +23,16 @@ class TestNome(unittest.TestCase):
         for detto in ("Ciro.", "Ehi Ciro!", "ciro", " Hey, Ciro? ", "Chiro"):
             self.assertEqual(server.togli_nome(detto), (True, ""), detto)
 
+    def test_storpiature_vere(self):
+        # come whisper ha scritto «Ehi Ciro» detto dall'utente il 19/11
+        for detto in ("e il giro.", "ehi, tiro!", "Ehi Giro", "hey tiro"):
+            self.assertEqual(server.togli_nome(detto), (True, ""), detto)
+        self.assertEqual(server.togli_nome("Ehi tiro, come stanno le sessioni"),
+                         (True, "come stanno le sessioni"))
+
     def test_non_chiamato(self):
-        for detto in ("PIP PIP PIP PIP", "come stanno le sessioni", "tre, sì", "giro di prova",
+        for detto in ("PIP PIP PIP PIP", "come stanno le sessioni", "tre, sì", "giro di prova", "zero",
+                      "e poi", "il giro del mondo in ottanta giorni",
                       "Ho detto a Ciro di aspettare", "Cirocalibrati e poi", ""):
             self.assertEqual(server.togli_nome(detto)[0], False, detto)
 

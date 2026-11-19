@@ -308,14 +308,33 @@ def solo_stop(testo):
 # «Ehi Ciro»: Ciro risponde solo se lo chiami (o nei 15 s dopo che ha parlato).
 # Il nome all'inizio della frase, anche come lo scrive whisper (Kiro, Chiro, ciro').
 NOME_RE = re.compile(r"^\W*(?:(?:ehi|ehy|hey|ei|ok|okay|oh)\W+)?(?:ciro|kiro|chiro|cyro|ciroo|cirò)\b'?[\s,.:;!?]*", re.I)
+# dopo «ehi» whisper (modello veloce) storpia il nome: «ehi, tiro!», «Ehi Giro», «e il giro»
+NOME_DOPO_EHI_RE = re.compile(r"^\W*(?:ehi|ehy|hey|hei|ei|eh|e)\W+(?:il\W+)?(?:tiro|giro|siro|piro|ciro|kiro|chiro)\b'?[\s,.:;!?]*", re.I)
+CHIAMATE = ("ehiciro", "heyciro", "eiciro", "okciro", "ciro")
+
+
+def _distanza(a, b):
+    riga = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        prima, riga[0] = riga[0], i
+        for j, cb in enumerate(b, 1):
+            prima, riga[j] = riga[j], min(riga[j] + 1, riga[j - 1] + 1, prima + (ca != cb))
+    return riga[-1]
 
 
 def togli_nome(testo):
     """(chiamato, resto): «Ciro, come va?» -> (True, «come va?»)."""
-    trovato = NOME_RE.match(testo or "")
-    if not trovato:
-        return False, (testo or "").strip()
-    return True, (testo or "")[trovato.end():].strip()
+    testo = (testo or "").strip()
+    trovato = NOME_RE.match(testo) or NOME_DOPO_EHI_RE.match(testo)
+    if trovato:
+        return True, testo[trovato.end():].strip()
+    # solo il nome, detto male: una frase di al massimo 3 parole che suona come «Ehi Ciro»
+    if 0 < len(testo.split()) <= 3:
+        compatto = re.sub(r"[^a-zò]", "", testo.lower())
+        soglia = 1 if len(compatto) <= 5 else 2
+        if compatto and min(_distanza(compatto, c) for c in CHIAMATE) <= soglia:
+            return True, ""
+    return False, testo
 
 
 def solo_verso(testo):
