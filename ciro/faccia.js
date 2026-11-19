@@ -564,6 +564,7 @@ async function inviaDiscorso(pezzi) {
       // (e riscende da sola quando la stanza torna silenziosa)
       const prima = rumoreAppreso;
       if (!calibrando) rumoreAppreso = Math.min(0.006, Math.max(rumoreAppreso, livello * 0.6));
+      else azioneGuida("ripeti"); // in calibrazione una frase vuota si ripete subito
       if (rumoreAppreso > prima) evento("soglia-alzata", prima.toFixed(4) + " -> " + rumoreAppreso.toFixed(4));
       impostaFase("ascolto");
       return;

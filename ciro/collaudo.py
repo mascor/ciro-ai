@@ -155,7 +155,7 @@ class Collaudo:
         if self.fase != "silenzio":
             return ""
         self.rumore = {"medio": float(medio), "p95": float(p95), "massimo": float(massimo)}
-        provvisoria = round(max(0.008, 2.5 * float(p95)), 4)
+        provvisoria = round(max(0.008, 3 * float(medio)), 4)
         modulo_cervello.imposta("soglia_microfono", provvisoria)
         self.rumore["soglia"] = provvisoria
         self.fase = "frasi"
@@ -195,14 +195,19 @@ class Collaudo:
 
     def _fine_calibrazione(self):
         voce = statistics.median(self.livelli) if self.livelli else 0.0
-        da_rumore = max(0.008, 2.5 * self.rumore.get("p95", 0.0))
-        soglia = round(max(0.008, min(da_rumore, 0.35 * voce)) if voce else da_rumore, 4)
+        # tra il rumore medio e la voce (media geometrica): un picco nel silenzio
+        # (eco, un colpo) non alza la soglia; mai oltre meta' della voce
+        rumore = self.rumore.get("medio", 0.0)
+        if voce:
+            soglia = round(max(0.008, min((rumore * voce) ** 0.5, 0.5 * voce)), 4)
+        else:
+            soglia = round(max(0.008, 3 * rumore), 4)
         modulo_cervello.imposta("soglia_microfono", soglia)
         self.rumore["soglia"] = soglia
         self.rumore["voce"] = voce
         capite = sum(1 for r in self.frasi_sentite if r["ok"])
         frase = "Calibrazione finita: ti ho capito %d frasi su %d." % (capite, len(FRASI))
-        if voce and da_rumore > 0.35 * voce:
+        if voce and voce < 5 * rumore:
             frase += " Parli piano rispetto al rumore: avvicinati al microfono."
         self._chiudi(frase)
 

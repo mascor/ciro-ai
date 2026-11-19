@@ -81,7 +81,8 @@ class TestCalibrazione(BaseCollaudo):
         self.assertTrue(self.detti[-1].startswith("Calibrazione finita"), self.detti)
         self.assertIn("5 frasi su 5", self.detti[-1])
         # threshold between the room noise (2.5 x p95) and the voice (0.35 x median)
-        self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.01)
+        # threshold between the mean room noise and the voice: sqrt(0.002 x 0.08)
+        self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.0126)
         self.assertEqual(self.pausa, {"attiva": False, "solo": []})
         self.assertEqual(len(self.rapporti()), 1)
         self.assertIn("Rumore", self.rapporti()[0].read_text(encoding="utf-8"))
@@ -94,11 +95,19 @@ class TestCalibrazione(BaseCollaudo):
 
     def test_voce_debole_avvisa_e_soglia_sotto_la_voce(self):
         self.c.avvia("calibrazione")
-        self.c.silenzio(0.004, 0.008, 0.02)          # noisy room: 2.5 x p95 = 0.02
+        self.c.silenzio(0.008, 0.02, 0.03)           # noisy room
         for detta in ("A", "B", "sì", "no", "B per prova due"):
             self.c.gestisci(detta, 0.03)              # quiet voice: 0.35 x 0.03 = 0.0105
-        self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.0105)
+        self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.015)  # half the voice
         self.assertIn("avvicinati al microfono", self.detti[-1])
+
+    def test_picco_nel_silenzio_non_da_falso_avviso(self):
+        self.c.avvia("calibrazione")
+        self.c.silenzio(0.0048, 0.0227, 0.0277)      # quiet room with one peak (19/11, real data)
+        for detta in ("A", "B", "sì", "no", "B per prova due"):
+            self.c.gestisci(detta, 0.0832)
+        self.assertNotIn("avvicinati", self.detti[-1])
+        self.assertAlmostEqual(modulo_cervello.leggi_impostazioni()["soglia_microfono"], 0.02)
 
     def test_ripeti_e_ferma(self):
         self.c.avvia("calibrazione")
