@@ -35,6 +35,10 @@ MODELLO_KOKORO = KOKORO_DIR / "kokoro-v1.0.onnx"
 VOCI_KOKORO = KOKORO_DIR / "voices-v1.0.bin"
 CACHE = KOKORO_DIR / "cache-faccia"
 MODELLO_WHISPER = Path.home() / ".local/share/whisper-cpp/ggml-large-v3-turbo-q5_0.bin"
+# riconoscitore di voce (Silero) dentro whisper: il rumore e il silenzio non vengono
+# trascritti, quindi niente "Grazie a tutti" inventati (misurato il 19/11/2026)
+MODELLO_VAD = Path(os.environ.get("CIRO_MODELLO_VAD") or
+                   Path.home() / ".local/share/whisper-cpp/ggml-silero-v5.1.2.bin")
 WHISPER = "/opt/homebrew/bin/whisper-cli"
 FFMPEG = "/opt/homebrew/bin/ffmpeg"
 
@@ -149,8 +153,9 @@ def trascrivi(byte_audio):
         subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(grezzo),
                         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(pronto)],
                        check=True, timeout=60)
+        vad = ["--vad", "-vm", str(MODELLO_VAD)] if MODELLO_VAD.is_file() else []
         esito = subprocess.run([WHISPER, "-m", str(MODELLO_WHISPER), "-l", LINGUA,
-                                "-nt", "-np", "-f", str(pronto)],
+                                "-nt", "-np", *vad, "-f", str(pronto)],
                                capture_output=True, text=True, timeout=180)
         testo = " ".join(esito.stdout.split())
         if esito.returncode != 0:

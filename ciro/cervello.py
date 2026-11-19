@@ -684,6 +684,8 @@ class Cervello:
         elif detto in ("si", "sì", "no"):
             lettera = "no" if detto == "no" else "si"
         if lettera is None:
+            lettera = self._lettera_da_parole(detto)   # «procedi» al posto di «A»
+        if lettera is None:
             return None
 
         if not self.domande_in_attesa:
@@ -730,6 +732,20 @@ class Cervello:
             imposta("pausa_progetti", False)
             imposta("solo_progetti", [])
             return self._detto(testo, "Progetti ripresi.", False)
+        return None
+
+    def _lettera_da_parole(self, detto):
+        """La lettera dell'opzione detta per intero («procedi» = A), solo se la
+        domanda aperta e' una e coincide con quello che Ciro ha detto per ultimo."""
+        if len(self.domande_in_attesa) != 1:
+            return None
+        scheda = next(iter(self.domande_in_attesa.values()))
+        ultimo = self.ultimo_detto or {}
+        if ultimo and not (ultimo.get("tipo") == "domanda" and ultimo.get("id") == scheda["id"]):
+            return None
+        for lettera, testo in opzioni_per_voce(scheda).items():
+            if _norma(testo) and _norma(testo) == _norma(detto):
+                return lettera
         return None
 
     def _rispondi_lettera(self, scheda, lettera, testo):

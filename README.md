@@ -174,6 +174,8 @@ environment elsewhere, set `CIRO_PYTHON=/path/to/python`.
 ```bash
 mkdir -p ~/.local/share/whisper-cpp && cd ~/.local/share/whisper-cpp
 curl -LO https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+# voice activity detection: noise and silence are never transcribed (no invented phrases)
+curl -LO https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin
 ```
 
 ### 5. Mailbox
