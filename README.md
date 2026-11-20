@@ -184,7 +184,13 @@ curl -LO https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5
 curl -LO https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
 ```
 
-Short audio (up to 3.5 s) goes to the fast model, longer phrases to large-v3-turbo.
+Short audio (up to 3.5 s) goes to the fast model. Longer phrases go to Hex
+(github.com/anomalyco/hex, model parakeet_v3) when it is installed and running:
+same accuracy on real voice, about six times faster (0.3 s instead of 1.9 s on a
+5-second phrase, measured 20/11/2026), and it keeps names right when they are in
+Hex's vocabulary (`hex vocabulary add`). Without Hex, or with its Labs › Transcribe
+files off, long phrases fall back to large-v3-turbo; nothing else changes.
+`CIRO_HEX=/path/to/hex` and `CIRO_MODELLO_HEX` override the binary and the model.
 `python3 ciro/strumenti/banco_voce.py` compares models on the phrases recorded during your
 calibrations (`--ciro` runs Ciro's own chain).
 

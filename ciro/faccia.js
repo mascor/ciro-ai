@@ -25,6 +25,94 @@ const interruttore = document.getElementById("interruttore");
 const interruttoreTesto = document.getElementById("interruttore-testo");
 const pannelloConsumi = document.getElementById("pannello-consumi");
 
+// ------------------------------------------------ una sola pagina di Ciro
+// Due schede aperte ascoltano lo stesso microfono e parlano tutte e due: si
+// sente Ciro con due voci. La prima scheda tiene la sessione, la seconda
+// resta bloccata (con ?forza=1 si apre lo stesso, per provarlo apposta).
+const CHIAVE_PAGINA = "ciro-pagina-attiva";
+const MIO_ID = Math.random().toString(36).slice(2);
+let paginaAttiva = false;
+let blocco = null;
+let battito = null;
+
+function mostraBlocco() {
+  if (blocco) return;
+  blocco = document.createElement("div");
+  blocco.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;" +
+    "align-items:center;justify-content:center;gap:14px;text-align:center;padding:32px;" +
+    "background:#111318;color:#f2f4f8;font:16px/1.5 -apple-system,BlinkMacSystemFont,sans-serif";
+  blocco.innerHTML = "<div style=\"font-size:22px\">Ciro è già aperto in un'altra scheda</div>" +
+    "<div style=\"max-width:460px;opacity:.75\">Questa scheda resta zitta e non ascolta, " +
+    "così non senti due voci. Chiudi l'altra scheda e questa si accende da sola.</div>" +
+    "<div style=\"max-width:460px;opacity:.45;font-size:13px\">Per avere due Ciro apposta: " +
+    "aggiungi <b>?forza=1</b> all'indirizzo.</div>";
+  document.body.appendChild(blocco);
+}
+
+function togliBlocco() {
+  if (!blocco) return;
+  blocco.remove();
+  blocco = null;
+}
+
+// Web Locks: il blocco si libera da solo quando la pagina che lo tiene si chiude
+function chiediBlocco() {
+  if (!navigator.locks) return Promise.resolve(prendiABattito());
+  return new Promise((risolvi) => {
+    navigator.locks.request("ciro-pagina", { mode: "exclusive", ifAvailable: true }, (preso) => {
+      risolvi(Boolean(preso));
+      if (preso) return new Promise(() => {}); // tenuto finché la pagina vive
+      return null;
+    }).catch(() => risolvi(prendiABattito()));
+  });
+}
+
+// ripiego per i browser senza Web Locks: un battito in localStorage
+function prendiABattito() {
+  try {
+    const ora = Date.now();
+    const attuale = JSON.parse(localStorage.getItem(CHIAVE_PAGINA) || "null");
+    if (attuale && attuale.id !== MIO_ID && ora - attuale.quando < 6000) return false;
+    localStorage.setItem(CHIAVE_PAGINA, JSON.stringify({ id: MIO_ID, quando: ora }));
+    clearInterval(battito);
+    battito = setInterval(() => {
+      try { localStorage.setItem(CHIAVE_PAGINA, JSON.stringify({ id: MIO_ID, quando: Date.now() })); }
+      catch (errore) { /* pazienza */ }
+    }, 2000);
+    window.addEventListener("pagehide", () => {
+      try {
+        const attuale2 = JSON.parse(localStorage.getItem(CHIAVE_PAGINA) || "null");
+        if (attuale2 && attuale2.id === MIO_ID) localStorage.removeItem(CHIAVE_PAGINA);
+      } catch (errore) { /* pazienza */ }
+      clearInterval(battito);
+    });
+    return true;
+  } catch (errore) {
+    return true; // localStorage negato: meglio accesa che bloccata per sbaglio
+  }
+}
+
+async function prendiSessione() {
+  if (new URLSearchParams(location.search).get("forza") === "1") return true;
+  return chiediBlocco();
+}
+
+prendiSessione().then((libera) => {
+  paginaAttiva = libera;
+  if (libera) return;
+  mostraBlocco();
+  evento("pagina-doppia", "bloccata");
+  // quando l'altra scheda si chiude questa riparte da sola
+  const attesa = setInterval(async () => {
+    if (await chiediBlocco()) {
+      clearInterval(attesa);
+      paginaAttiva = true;
+      togliBlocco();
+      evento("pagina-doppia", "sbloccata");
+    }
+  }, 3000);
+});
+
 // ---------------------------------------------------------------- animazione
 let fase = "pronto";        // pronto | ascolto | penso | parlo
 let livelloVoce = 0;        // 0..1 ampiezza della voce in uscita
@@ -248,6 +336,7 @@ function caricaVoce(testo) {
 }
 
 function di(testo) {
+  if (!paginaAttiva) return; // seconda scheda: zitta, la voce la fa l'altra
   const pulito = (testo || "").trim();
   if (pulito && (sveglia || muto)) sottotitolo("ciro", pulito); // anche se zitto: la leggi
   if (!pulito || !sveglia || muto) return; // spento o zitto: resta solo nella chat
@@ -350,6 +439,7 @@ setInterval(controllaInattivita, 3000);
 // ------------------------------------------------------ accesa / dorme
 function accendi(saluta) {
   if (sveglia) return;
+  if (!paginaAttiva) return; // seconda scheda: non ascolta e non parla
   sveglia = true;
   evento("acceso", saluta === false ? "senza saluto" : "");
   interruttore.classList.add("acceso");
@@ -417,6 +507,7 @@ const PRE_ROLL = [];      // 350 ms prima che si capisca che stai parlando
 
 async function accendiMicrofono() {
   if (micAttivo) return;
+  if (!paginaAttiva) return; // seconda scheda: il microfono resta spento
   flusso = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
   });
@@ -716,6 +807,7 @@ apriChat.addEventListener("click", () => {
 chiudiChat.addEventListener("click", () => chat.classList.remove("aperta"));
 
 document.addEventListener("keydown", (evento) => {
+  if (!paginaAttiva) return; // seconda scheda: nessun tasto comanda Ciro
   if (evento.key === "Escape") chat.classList.remove("aperta");
   if (document.activeElement === chatTesto) return;
   segnalaAttivita();
@@ -748,6 +840,7 @@ function spegniMicrofono() {
 
 // ------------------------------------------------- fine dell'ascolto, avvio
 bottoneAvvio.addEventListener("click", async () => {
+  if (!paginaAttiva) return; // la seconda scheda resta ferma
   avvio.classList.remove("visibile");
   await ctxUscita.resume();
   // la prima volta che un utente usa Ciro parte la calibrazione (come la
@@ -868,6 +961,25 @@ function numeroDi(attesa) {
   return numero;
 }
 
+// la × di ogni voce: sparisce dal pannello finche' non arriva qualcosa di nuovo
+function bottoneChiudi(attesa) {
+  const bottone = document.createElement("button");
+  bottone.type = "button";
+  bottone.className = "chiudi-voce";
+  bottone.textContent = "×";
+  bottone.title = T("Chiudi: non la mostro finché non arriva qualcosa di nuovo");
+  bottone.addEventListener("click", async (evento) => {
+    evento.stopPropagation();
+    bottone.disabled = true;
+    try {
+      await fetch("/api/nascondi", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chiave: attesa.chiave }) });
+    } catch (errore) { /* al giro dopo */ }
+    aggiornaQuadro();
+  });
+  return bottone;
+}
+
 function rigaMessaggio(attesa) {
   const riga = document.createElement("div");
   riga.className = "messaggio" + (attesa.urgente ? " urgente" : "");
@@ -885,6 +997,7 @@ function rigaMessaggio(attesa) {
   // uno spazio senza anteprima: solo nome e tempo, niente «Messaggi non letti»
   const vuoto = !attesa.testo || ["Messaggi non letti", "Unread messages"].includes(attesa.testo);
   if (vuoto) riga.classList.add("corta");
+  if (attesa.chiave) quando.appendChild(bottoneChiudi(attesa));
   riga.append(attesa.numero ? numeroDi(attesa) : document.createElement("span"), chi, quando);
   if (!vuoto) riga.appendChild(testo);
   if (attesa.motivo) {   // il giudizio del modello: perche' e' (o non e') urgente
@@ -1002,6 +1115,7 @@ function disegnaDomande(elenco) {
     // la casella intera: con piu' profili si capisce dove e' arrivato
     const dove = diChat ? "Chat " + String(attesa.account || "") : T(attesa.tipo);
     quando.textContent = `${dove} · ${testoAttesa(attesa.secondi)}`;
+    if (attesa.chiave) quando.appendChild(bottoneChiudi(attesa));
     testa.append(progetto, quando);
     const testo = document.createElement("p");
     testo.textContent = attesa.testo;

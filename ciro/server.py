@@ -46,6 +46,13 @@ MODELLO_VAD = Path(os.environ.get("CIRO_MODELLO_VAD") or
                    Path.home() / ".local/share/whisper-cpp/ggml-silero-v5.1.2.bin")
 WHISPER = "/opt/homebrew/bin/whisper-cli"
 FFMPEG = "/opt/homebrew/bin/ffmpeg"
+# Hex (github.com/anomalyco/hex) trascrive le frasi lunghe con parakeet_v3: stesso
+# risultato di whisper sull'audio vero ma molto piu' veloce. Se manca o risponde
+# male (laboratorio «Transcribe files» spento) si usa whisper come sempre.
+HEX = os.environ.get("CIRO_HEX") or next(
+    (p for p in ("/Applications/Hex.app/Contents/MacOS/hex", "/opt/homebrew/bin/hex",
+                 str(Path.home() / ".local/bin/hex")) if Path(p).is_file()), "")
+MODELLO_HEX = os.environ.get("CIRO_MODELLO_HEX") or "parakeet_v3"
 
 CONFIG_FACCIA = Path.home() / ".config/faccia"
 FILE_CLAUDE_CODE = CONFIG_FACCIA / "claude-code.json"   # scritto da barra-stato.py
@@ -334,8 +341,58 @@ def solo_verso(testo):
     return bool(VERSO_RE.match(re.sub(r"[^a-z]", "", (testo or "").lower())))
 
 
+def trascrivi_hex(percorso):
+    """Le frasi lunghe con Hex (parakeet): sull'audio vero capisce come whisper ma
+    e' dieci volte piu' veloce (0,15 s invece di 1,9 s su una frase di 5 secondi,
+    misurato il 20/11/2026). None se Hex non risponde: si ricade su whisper."""
+    if not HEX:
+        return None
+    comando = [HEX, "transcribe", "--model", MODELLO_HEX,
+               "--language", lingua_whisper(), "--json", str(percorso)]
+    inizio = time.time()
+    try:
+        esito = subprocess.run(comando, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as errore:
+        registra("hex-fallito", errore=repr(errore)[:200])
+        return None
+    secondi = round(time.time() - inizio, 2)
+    try:
+        risposta = json.loads(esito.stdout or "{}")
+    except ValueError:
+        risposta = {}
+    testo = pulisci_trascrizione(risposta.get("text") if isinstance(risposta, dict) else "")
+    if esito.returncode != 0 or risposta.get("status") != "transcript" or not testo:
+        # laboratorio spento, niente voce nel file o Hex chiuso: decide whisper
+        registra("hex-fallito", secondi=secondi, codice=risposta.get("code"),
+                 uscita=" ".join((esito.stderr or "").split())[:200])
+        return None
+    registra("ascolto-hex", secondi=secondi, testo=testo[:120])
+    return testo
+
+
+def trascrivi_whisper(percorso, durata, grande=False):
+    """whisper.cpp: il modello rapido per l'audio breve, il turbo per il resto."""
+    testo = ""
+    for modello, con_vad in passate_whisper(durata, grande=grande):
+        # VAD tarato sulla voce vera: con i valori predefiniti una «A» detta da sola
+        # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
+        vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
+               if con_vad and MODELLO_VAD.is_file() else [])
+        percorso_modello = modello_rapido() if modello == "rapido" else MODELLO_WHISPER
+        esito = subprocess.run([WHISPER, "-m", str(percorso_modello), "-l", lingua_whisper(),
+                                "-nt", "-np", *vad, "-f", str(percorso)],
+                               capture_output=True, text=True, timeout=180)
+        if esito.returncode != 0:
+            raise RuntimeError("whisper: " + " ".join(esito.stderr.split())[-400:])
+        testo = pulisci_trascrizione(esito.stdout)
+        if testo:
+            break
+    return testo
+
+
 def trascrivi(byte_audio, grande=False):
-    """Trascrive un WAV (qualsiasi frequenza) in italiano con whisper.cpp."""
+    """Trascrive un WAV (qualsiasi frequenza) in italiano: Hex per le frasi lunghe,
+    whisper.cpp per l'audio breve (lettere, sì/no, dove Hex sbaglia di piu')."""
     if not MODELLO_WHISPER.exists():
         raise RuntimeError("manca il modello whisper in " + str(MODELLO_WHISPER))
     with tempfile.TemporaryDirectory() as tmp:
@@ -346,21 +403,10 @@ def trascrivi(byte_audio, grande=False):
                         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(pronto)],
                        check=True, timeout=60)
         durata = max(0, pronto.stat().st_size - 44) / 32000.0
-        testo = ""
-        for modello, con_vad in passate_whisper(durata, grande=grande):
-            # VAD tarato sulla voce vera: con i valori predefiniti una «A» detta da sola
-            # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
-            vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
-                   if con_vad and MODELLO_VAD.is_file() else [])
-            percorso = modello_rapido() if modello == "rapido" else MODELLO_WHISPER
-            esito = subprocess.run([WHISPER, "-m", str(percorso), "-l", lingua_whisper(),
-                                    "-nt", "-np", *vad, "-f", str(pronto)],
-                                   capture_output=True, text=True, timeout=180)
-            if esito.returncode != 0:
-                raise RuntimeError("whisper: " + " ".join(esito.stderr.split())[-400:])
-            testo = pulisci_trascrizione(esito.stdout)
-            if testo:
-                break
+        # grande=True vuol dire "aspetta il nome": lì resta il modello grande di whisper
+        testo = None if (durata <= AUDIO_BREVE or grande) else trascrivi_hex(pronto)
+        if not testo:
+            testo = trascrivi_whisper(pronto, durata, grande=grande)
         # whisper "sente" queste frasi nel rumore; un "grazie" da solo non chiede
         # comunque nulla a Ciro, quindi si scarta anche quello
         if any(frase in testo.lower() for frase in ALLUCINAZIONI) or \
