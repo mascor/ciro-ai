@@ -319,6 +319,14 @@ def solo_stop(testo):
 
 # «Ehi Ciro»: il riconoscimento del nome sta in nome.py (anche la calibrazione lo usa)
 togli_nome = modulo_nome.togli_nome
+
+
+def nome_in_ascolto(testo):
+    """(chiamato, resto) per la pagina. In calibrazione «ehi ciro» e' una frase da ripetere,
+    non una chiamata: la pagina la deve mandare alla calibrazione (issue #38)."""
+    if _collaudo.attivo:
+        return False, testo
+    return togli_nome(testo)
 _tentativi_nome = collections.deque(maxlen=5)   # frasi non riconosciute mentre aspettava il nome
 
 
@@ -1907,7 +1915,7 @@ class Gestore(BaseHTTPRequestHandler):
                     _ultimi_audio.append((testo, corpo))
                 registra("ascolto", testo=testo, audio_kb=len(corpo) // 1024,
                          secondi_trascrizione=round(time.time() - inizio, 1))
-                chiamato, resto = togli_nome(testo)
+                chiamato, resto = nome_in_ascolto(testo)
                 if aspetta_nome:
                     nota_ascolto_nome(testo, chiamato)
                 self._invia(200, json.dumps({"testo": testo, "chiamato": chiamato, "resto": resto}))
