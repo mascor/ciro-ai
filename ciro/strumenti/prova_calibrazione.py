@@ -82,6 +82,10 @@ def main():
                 passo + 1, frase, repr(sentito.get("testo")), sentito.get("chiamato"), risposta[:70]))
             if "ripeti" not in risposta.lower() and "repeat" not in risposta.lower():
                 indice += 1
+            # the closing phrase goes to the page queue, not in the answer: ask the phase
+            if chiama(a.url, "/api/collaudo", {}).get("fase") in ("fine", "spento"):
+                finita = True
+                break
             time.sleep(0.3)
     finally:
         try:
