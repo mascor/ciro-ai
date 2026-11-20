@@ -124,6 +124,7 @@ const EN_UI = {
   "Lettura non riuscita": "Read failed",
   "Scheda di Chat chiusa": "Chat tab closed",
   "Chiudi: non la mostro finché non arriva qualcosa di nuovo": "Close: hidden until something new arrives",
+  "Dato vecchio: riapri la sua scheda in Chrome": "Old reading: open its tab in Chrome again",
 };
 
 // T("da %d min", 5): translation, then %s/%d replaced in order

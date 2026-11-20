@@ -155,6 +155,10 @@ EN = {
     "Il messaggio è troppo lungo per leggertelo. Dimmelo più corto.":
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
+    "%d minuti": "%d minutes",
+    "%d ore": "%d hours",
+    "I consumi di %s %s sono fermi da %s: riapri la sua scheda in Chrome.":
+        "The usage of %s %s has not updated for %s: open its tab in Chrome again.",
     "Messaggi non letti": "Unread messages",
     "Chiusa la %s.": "Closed number %s.",
     "%s aspetta ancora la tua risposta.": "%s is still waiting for your answer.",

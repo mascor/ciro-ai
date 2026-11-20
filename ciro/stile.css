@@ -729,6 +729,9 @@ button {
   margin-bottom: 6px;
 }
 .consumo-titolo .eta { font-weight: 400; font-size: 15px; opacity: .55; white-space: nowrap; }
+/* issue #23: dato fermo da piu' di 15 minuti, grigio con l'eta' in ambra */
+.consumo.vecchio > :not(.consumo-titolo), .consumo.vecchio .consumo-titolo > span:first-child { opacity: .45; }
+.consumo.vecchio .eta { color: #f4b942; opacity: 1; }
 .barra-consumo {
   display: grid;
   grid-template-columns: 96px 1fr 52px;

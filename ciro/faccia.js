@@ -1431,7 +1431,8 @@ function disegnaConsumi(elenco) {
   }
   for (const consumo of elenco) {
     const blocco = document.createElement("div");
-    blocco.className = "consumo";
+    blocco.className = "consumo" + (consumo.vecchio ? " vecchio" : "");
+    if (consumo.vecchio) blocco.title = T("Dato vecchio: riapri la sua scheda in Chrome");
     const titolo = document.createElement("div");
     titolo.className = "consumo-titolo";
     const nome = document.createElement("span");
