@@ -71,7 +71,6 @@ _coda = []            # messaggi da far dire alla faccia
 _coda_lock = threading.Lock()
 _cervello = modulo_cervello.Cervello()
 _cervello.chiudi_chat = lambda chiave: _chat.chiudi(chiave)
-_cervello.nascondi = lambda chiave: nascondi(chiave)
 _cervello.riassunto_perso = lambda dal: frase_perso(dal)
 _cervello_lock = threading.Lock()
 _kokoro = None
@@ -728,10 +727,7 @@ def attese(sessioni=None):
                        "urgente": False, "a_voce": False, "secondi": secondi})
     # prima chi aspetta da piu' tempo; i messaggi di Chat non urgenti in fondo
     elenco.sort(key=lambda v: (v.get("tipo") == "chat" and not v.get("urgente"), -v["secondi"]))
-    elenco = togli_nascoste(elenco)
     numera(elenco)
-    for voce in elenco:
-        voce["chiave"] = chiave_numero(voce)   # per la × del pannello
     return elenco[:40]   # il pannello scorre (19/11/2026): prima 10, e i messaggi di Chat sparivano
 
 
@@ -739,64 +735,6 @@ def chiave_numero(voce):
     if voce.get("chat_id"):
         return "chat|" + voce["chat_id"]   # stesso numero finche' la conversazione resta aperta
     return voce.get("domanda_id") or _chiave(voce)
-
-
-# «chiudi cinque» o la × del pannello: la voce sparisce finche' non cambia
-# (un testo nuovo nella stessa chat, una nuova domanda della stessa sessione).
-_nascoste_lock = threading.Lock()
-
-
-def _file_nascoste():
-    return Path(modulo_cervello.CONTESTO).with_name("nascoste.json")
-
-
-def _impronta(voce):
-    return voce.get("domanda_id") or (voce.get("testo") or "")[:280]
-
-
-def togli_nascoste(elenco):
-    with _nascoste_lock:
-        try:
-            nascoste = json.loads(_file_nascoste().read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            nascoste = {}
-        if not nascoste:
-            return elenco
-        tenute, restano = [], {}
-        for voce in elenco:
-            chiave = chiave_numero(voce)
-            if chiave in nascoste and nascoste[chiave] == _impronta(voce):
-                restano[chiave] = nascoste[chiave]
-                continue
-            tenute.append(voce)
-        if restano != nascoste:   # cambiate o sparite: non piu' nascoste
-            try:
-                _file_nascoste().write_text(json.dumps(restano, ensure_ascii=False), encoding="utf-8")
-            except OSError:
-                pass
-        return tenute
-
-
-def nascondi(chiave):
-    """Toglie dal pannello la voce con questa chiave. Ritorna la voce (o None)."""
-    voce = next((v for v in attese() if chiave_numero(v) == chiave), None)
-    if voce is None:
-        return None
-    if voce.get("chat_id") and not str(voce["chat_id"]).startswith("lettura|"):
-        _chat.chiudi(voce["chat_id"])   # Chat: come «letto il …»
-        return voce
-    with _nascoste_lock:
-        try:
-            nascoste = json.loads(_file_nascoste().read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            nascoste = {}
-        nascoste[chiave] = _impronta(voce)
-        try:
-            _file_nascoste().write_text(json.dumps(nascoste, ensure_ascii=False), encoding="utf-8")
-        except OSError:
-            pass
-    registra("nascosta", chiave=chiave[:120])
-    return voce
 
 
 def numera(elenco):
@@ -1932,9 +1870,6 @@ class Gestore(BaseHTTPRequestHandler):
                     modulo_cervello.imposta("lingua", dato["lingua"])
                     registra("lingua", lingua=dato["lingua"])
                 self._invia(200, json.dumps({"lingua": lingua()}))
-            elif percorso == "/api/nascondi":
-                voce = nascondi(str(json.loads(corpo or b"{}").get("chiave") or ""))
-                self._invia(200, json.dumps({"nascosta": voce is not None}))
             elif percorso == "/api/pausa":
                 dato = json.loads(corpo or b"{}")
                 self._invia(200, json.dumps(imposta_pausa(dato.get("attiva"), dato.get("solo"))))
