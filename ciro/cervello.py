@@ -109,12 +109,28 @@ def _deepseek_diretto(prompt, timeout):
         return None
 
 
+SENZA_MODELLO = "senza-modello"
+CODICE_SENZA_MODELLO = 127
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# opencode c'e' ma il modello non e' collegato (nessun /connect): stessa spiegazione
+MODELLO_NON_COLLEGATO_RE = re.compile(r"model unavailable|provider not found|no provider|"
+                                      r"not authenticated|api key", re.IGNORECASE)
+
+
 def chiedi_modello(prompt, timeout):
     """(uscita, errore, codice) come _esegui: prima DeepSeek diretto, poi OpenCode."""
     testo = _deepseek_diretto(prompt, min(timeout, 30))
     if testo:
         return testo, "", 0
-    return _esegui(["opencode", "run", "-m", MODELLO, "--archived", "--title", "faccia", prompt], timeout)
+    try:
+        uscita, errore, codice = _esegui(["opencode", "run", "-m", MODELLO, "--archived", "--title", "faccia",
+                                          prompt], timeout)
+    except OSError:   # opencode non installato o fuori dal PATH, e nessuna chiave DeepSeek (issue #43)
+        return "", SENZA_MODELLO, CODICE_SENZA_MODELLO
+    errore = ANSI_RE.sub("", errore or "")
+    if codice != 0 and MODELLO_NON_COLLEGATO_RE.search(errore):
+        return "", SENZA_MODELLO, CODICE_SENZA_MODELLO
+    return uscita, errore, codice
 
 
 def _esegui(comando, timeout):
@@ -1486,6 +1502,11 @@ class Cervello:
             )
         except subprocess.TimeoutExpired:
             return {"risposta": t("Ci sto mettendo troppo. Riprova tra un momento."), "azione": None, "mandato": False}
+        if codice == CODICE_SENZA_MODELLO and errore == SENZA_MODELLO:
+            self.storico.pop()
+            return {"risposta": t("Non ho un modello per risponderti: collega DeepSeek in OpenCode con /connect, "
+                                  "oppure metti la chiave nel Portachiavi (servizio ciro-deepseek)."),
+                    "azione": None, "mandato": False}
         if codice != 0 or not uscita:
             dettaglio = (errore or "").strip().splitlines()
             return {

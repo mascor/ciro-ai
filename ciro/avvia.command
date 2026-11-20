@@ -1,6 +1,8 @@
 #!/bin/zsh
 # Apre la faccia parlante: avvia il server locale e il browser.
 cd "$(dirname "$0")" || exit 1
+# started outside a login shell (Finder, ssh): Homebrew tools (opencode, whisper-cli, ffmpeg) in PATH
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 PORTA="${FACCIA_PORTA:-8765}"
 
 # se gira gia', apro solo la finestra

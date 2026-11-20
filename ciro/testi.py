@@ -156,6 +156,10 @@ EN = {
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
     "%d minuti": "%d minutes",
+    "Non ho un modello per risponderti: collega DeepSeek in OpenCode con /connect, "
+    "oppure metti la chiave nel Portachiavi (servizio ciro-deepseek).":
+        "I have no model to answer you: connect DeepSeek in OpenCode with /connect, "
+        "or put the key in the Keychain (service ciro-deepseek).",
     "%d ore": "%d hours",
     "I consumi di %s %s sono fermi da %s: riapri la sua scheda in Chrome.":
         "The usage of %s %s has not updated for %s: open its tab in Chrome again.",
