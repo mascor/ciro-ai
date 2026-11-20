@@ -555,6 +555,38 @@ def consumo_deepseek_api():
 
 
 ORDINE_FONTI = {"claude-code": 0, "claude.ai": 0, "opencode-go": 1, "deepseek": 2}
+# issue #23: dopo 15 minuti senza aggiornamento il dato e' vecchio (pannello in grigio);
+# per i dati letti da una scheda di Chrome Ciro lo dice una volta sola, finche' non torna fresco
+CONSUMO_VECCHIO = 15 * 60
+FONTI_DA_SCHEDA = {"claude.ai": "Claude", "opencode-go": "OpenCode Go"}
+_consumi_ricordati = set()
+
+
+def _da_quanto(secondi):
+    minuti = max(1, int(secondi // 60))
+    if minuti < 60:
+        return t("%d minuti") % minuti
+    return t("%d ore") % round(minuti / 60)
+
+
+def giro_consumi(elenco=None, adesso=None):
+    """Un promemoria a voce per ogni dato di consumo vecchio letto da una scheda di Chrome."""
+    adesso = time.time() if adesso is None else adesso
+    for consumo in consumi() if elenco is None else elenco:
+        nome = FONTI_DA_SCHEDA.get(consumo.get("fonte"))
+        if not nome:
+            continue   # Claude Code e DeepSeek: riaprire una scheda non serve
+        chiave = "%s|%s" % (consumo.get("fonte"), consumo.get("account"))
+        if not consumo.get("vecchio"):
+            _consumi_ricordati.discard(chiave)
+            continue
+        if chiave in _consumi_ricordati:
+            continue
+        _consumi_ricordati.add(chiave)
+        frase = t("I consumi di %s %s sono fermi da %s: riapri la sua scheda in Chrome.") % (
+            nome, consumo.get("account") or "", _da_quanto(adesso - (consumo.get("aggiornato") or adesso)))
+        _in_coda({"testo": frase, "da": "consumi", "progetto": "consumi", "quando": adesso})
+        registra("consumo-vecchio", fonte=consumo.get("fonte"), account=str(consumo.get("account"))[:60])
 ORGANIZZAZIONE_RE = re.compile(r"['’]s organi[sz]ation$", re.IGNORECASE)
 
 
@@ -612,6 +644,8 @@ def consumi():
     elenco = []
     for consumo in scelti.values():
         consumo = dict(consumo)
+        aggiornato = consumo.get("aggiornato") or 0
+        consumo["vecchio"] = bool(aggiornato) and adesso - aggiornato > CONSUMO_VECCHIO
         consumo["account"] = _nome_account(consumo.get("account"))
         consumo["voci"] = [_voce_attuale(voce, adesso) for voce in consumo.get("voci") or []]
         elenco.append(consumo)
@@ -979,6 +1013,10 @@ def sorveglia_attese():
             giro_avvisi()
         except Exception as errore:  # noqa: BLE001
             registra("errore-avvisi", errore=repr(errore)[:300])
+        try:
+            giro_consumi()   # fuori da giro_avvisi: i test della chat non leggono i consumi veri
+        except Exception as errore:  # noqa: BLE001
+            registra("errore-consumi", errore=repr(errore)[:300])
         time.sleep(8)
 
 
