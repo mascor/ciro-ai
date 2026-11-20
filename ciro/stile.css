@@ -1017,3 +1017,18 @@ button {
 #sogni { left: var(--fascia); right: var(--destra); z-index: 0; }
 .messaggio.corta { padding-top: 5px; padding-bottom: 5px; }
 .messaggio.corta .chi { font-weight: 500; font-size: 14px; }
+
+/* la × di ogni voce di «Ti aspettano» */
+.chiudi-voce {
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1.2;
+  opacity: .45;
+  cursor: pointer;
+}
+.chiudi-voce:hover { opacity: 1; background: rgba(255, 255, 255, .12); }

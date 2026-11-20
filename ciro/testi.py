@@ -156,6 +156,8 @@ EN = {
         "The message is too long to read back to you. Tell me a shorter one.",
     "Lettura non riuscita": "Read failed",
     "Messaggi non letti": "Unread messages",
+    "Chiusa la %s.": "Closed number %s.",
+    "%s aspetta ancora la tua risposta.": "%s is still waiting for your answer.",
     "La %s è un messaggio di Chat: per toglierlo di' «letto il %s».":
         "Number %s is a Chat message: to remove it say «read %s».",
     "Scheda di Chat chiusa": "Chat tab closed",

@@ -123,6 +123,7 @@ const EN_UI = {
   "urgente": "urgent",
   "Lettura non riuscita": "Read failed",
   "Scheda di Chat chiusa": "Chat tab closed",
+  "Chiudi: non la mostro finché non arriva qualcosa di nuovo": "Close: hidden until something new arrives",
 };
 
 // T("da %d min", 5): translation, then %s/%d replaced in order

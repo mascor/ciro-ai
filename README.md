@@ -258,6 +258,7 @@ microphone. Say "Ciro, mi senti?" ("Ciro, can you hear me?").
 | "tre, sì" / "la tre: due" | answers question number three (every open question has a number: "Domanda tre, da …", **#3** on the panel) |
 | "domanda tre" | reads question three again; a short answer then goes to it |
 | "due per alpha-bot" | answers that project's question |
+| "chiudi cinque" ("close five") or the **×** on the panel | hides item five until something new arrives (a new question from that session, a new Chat message); the session's question stays unanswered |
 | "annulla" / "rispondi due" (within 2 min) | sends a correction for the answer just given |
 
 Questions are numbered because whisper understands numbers far better than project names.

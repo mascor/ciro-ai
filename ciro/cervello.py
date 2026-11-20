@@ -627,6 +627,7 @@ class Cervello:
         self.sentito_per_risposta = {}  # ID -> cosa aveva capito whisper (per imparare dalle correzioni)
         self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
         self.chiudi_chat = None       # il server collega la chiusura di un messaggio di Chat
+        self.nascondi = None          # il server collega «chiudi cinque» (toglie una voce dal pannello)
         self.riassunto_perso = None   # il server collega «cosa mi sono perso» (dal -> frase)
         self.ultimo_utente_t = None   # l'ultima volta che l'utente ha detto qualcosa
         self.ultimo_perso_t = None    # l'ultima volta che ha chiesto cosa si e' perso
@@ -960,6 +961,22 @@ class Cervello:
             if voce and str(voce.get("chiave", "")).startswith("chat|") and self.chiudi_chat:
                 self.chiudi_chat(voce["chiave"][len("chat|"):])
                 return self._detto(testo, t("Va bene."), False)
+        # «chiudi cinque», «close five»: la voce sparisce dal pannello (non risponde alla sessione)
+        if len(parole) >= 2 and parole[0] in ("chiudi", "chiudere", "nascondi", "togli", "close", "hide", "dismiss"):
+            resto = [re.sub(r"^l'", "", p) for p in parole[1:] if p not in ("il", "la", "lo", "domanda", "numero",
+                                                                             "messaggio", "the", "number", "question")]
+            numero = modulo_numeri.DETTI.get(resto[0]) if len(resto) == 1 else None
+            if numero:
+                voce = self.numeri.cerca(numero)
+                if voce is None or not self.nascondi:
+                    return self._detto(testo, self._non_ce(numero), False)
+                tolta = self.nascondi(voce["chiave"])
+                if not tolta:
+                    return self._detto(testo, self._non_ce(numero), False)
+                risposta = t("Chiusa la %s.") % modulo_numeri.parola(numero, lingua())
+                if not str(voce["chiave"]).startswith("chat|"):
+                    risposta += " " + t("%s aspetta ancora la tua risposta.") % (voce.get("progetto") or "?")
+                return self._detto(testo, risposta, False)
         esplicita = False
         while parole and parole[0] in PRIMA_DEL_NUMERO:
             esplicita = esplicita or parole[0] in ("domanda", "numero", "question", "number")
