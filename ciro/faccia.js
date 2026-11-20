@@ -1104,6 +1104,7 @@ function disegnaDomande(elenco) {
     progetto.textContent = diChat ? (attesa.mittente || "?")
       : (attesa.sessione && attesa.sessione.toLowerCase() !== String(attesa.progetto || "").toLowerCase()
         ? `${attesa.sessione} · ${attesa.progetto}` : (attesa.progetto || "?"));
+    progetto.title = progetto.textContent;   // il nome intero quando e' tagliato
     if (attesa.numero) {
       // il numero della domanda: a voce «tre, sì» invece del nome del progetto
       const numero = document.createElement("span");

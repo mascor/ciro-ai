@@ -796,6 +796,9 @@ button {
 .attesa:hover { background: rgba(255, 255, 255, .1); }
 .attesa-testa { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; }
 .attesa-testa span { font-size: 13px; opacity: .6; white-space: nowrap; }
+/* il nome resta su una riga: «alpha-…» invece di «alpha-» a capo «bot» (issue #7) */
+.attesa-testa b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attesa-testa > span { flex-shrink: 0; }
 .attesa p {
   margin: 4px 0 0;
   font-size: 15px;
