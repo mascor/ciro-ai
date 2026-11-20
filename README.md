@@ -149,8 +149,11 @@ The repository has three parts:
 - [OpenCode](https://opencode.ai) with a DeepSeek provider (direct API or OpenCode Go).
 
 ```bash
-brew install whisper-cpp ffmpeg
+brew install whisper-cpp ffmpeg python@3.12
 ```
+
+Homebrew belongs to the user who installed it: on a standard (non-admin) account, ask an
+administrator to run the `brew` commands. Everything else installs in your own home folder.
 
 ### 2. Get the code
 
@@ -238,6 +241,7 @@ In OpenCode, connect DeepSeek with `/connect` — never paste API keys in a chat
 
 The browser opens `http://127.0.0.1:8765/`: press **Inizia** ("Start") and allow the
 microphone. Say "Ciro, mi senti?" ("Ciro, can you hear me?").
+The first answer takes a few seconds while the voice and speech models load; after that it is fast.
 
 ### 8. Optional
 
@@ -260,15 +264,15 @@ microphone. Say "Ciro, mi senti?" ("Ciro, can you hear me?").
 | "due per alpha-bot" | answers that project's question |
 | "chiudi cinque" ("close five") or the **×** on the panel | hides item five until something new arrives (a new question from that session, a new Chat message); the session's question stays unanswered |
 | "annulla" / "rispondi due" (within 2 min) | sends a correction for the answer just given |
+| "da ora in poi …" ("from now on …") | saves a general rule |
+| "da ora chiedimi sempre prima di pubblicare X" | removes the automatic test-deploy rule for X |
+| "riepilogo ogni ora" / "niente riepiloghi" | changes the summaries |
+| anything else | normal conversation about your sessions and mail |
 
 Questions are numbered because whisper understands numbers far better than project names.
 Ciro reads the options as numbers ("uno, procedi; due, fermati"): in Italian the letters
 *bi, ci, di, vi* sound alike, while numbers do not. A letter said alone with three or more
 options gets a quick check ("Hai detto tre, …?").
-| "da ora in poi …" ("from now on …") | saves a general rule |
-| "da ora chiedimi sempre prima di pubblicare X" | removes the automatic test-deploy rule for X |
-| "riepilogo ogni ora" / "niente riepiloghi" | changes the summaries |
-| anything else | normal conversation about your sessions and mail |
 
 For a session, a question looks like this:
 
