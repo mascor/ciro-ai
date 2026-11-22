@@ -1060,11 +1060,34 @@ function disegnaCaselle(chat) {
   }
 }
 
+// issue #50: con la pagina in secondo piano e sessioni in attesa, il titolo della scheda lampeggia
+const TITOLO_PAGINA = document.title;
+let sessioniInAttesa = 0;
+let timerTitolo = null;
+function titoloLampeggiante(quante) {
+  sessioniInAttesa = quante;
+  const serve = quante > 0 && document.hidden;
+  if (!serve) {
+    if (timerTitolo) clearInterval(timerTitolo);
+    timerTitolo = null;
+    document.title = TITOLO_PAGINA;
+    return;
+  }
+  if (timerTitolo) return;
+  let acceso = false;
+  timerTitolo = setInterval(() => {
+    acceso = !acceso;
+    document.title = acceso ? `(${sessioniInAttesa}) ${T("Ti aspettano")}` : TITOLO_PAGINA;
+  }, 1000);
+}
+document.addEventListener("visibilitychange", () => titoloLampeggiante(sessioniInAttesa));
+
 let ultimeAttese = [];
 function disegnaAttese(elenco) {
   ultimeAttese = elenco;
   pannelloAttese.innerHTML = "";
   contaAttese.textContent = elenco.length ? `(${elenco.length})` : "";
+  titoloLampeggiante(elenco.filter((a) => a.tipo !== "chat").length);
   if (!elenco.length) {
     const vuoto = document.createElement("li");
     vuoto.className = "vuoto";
@@ -1094,7 +1117,8 @@ function disegnaDomande(elenco) {
     const riga = document.createElement("li");
     const diChat = attesa.tipo === "chat";
     riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : diChat ? "chat" : "posta") +
-      (diChat && attesa.urgente ? " urgente" : "");
+      (diChat && attesa.urgente ? " urgente" : "") +
+      (diChat ? "" : " lampeggia");   // issue #50: una sessione ti aspetta
     riga.title = diChat ? (attesa.motivo || attesa.testo || "") : T("Clicca per rispondere a %s", attesa.progetto);
     const testa = document.createElement("div");
     testa.className = "attesa-testa";
