@@ -796,6 +796,15 @@ button {
   transition: background .2s ease;
 }
 .attesa.posta { border-left-color: #ff8a6b; background: rgba(255, 138, 107, .08); }
+/* issue #50: una sessione ti aspetta, la voce lampeggia finche' non rispondi */
+.attesa.lampeggia { animation: lampeggio 1.2s ease-in-out infinite; }
+@keyframes lampeggio {
+  0%, 100% { background: rgba(255, 138, 107, .08); box-shadow: none; }
+  50% { background: rgba(255, 138, 107, .32); box-shadow: 0 0 0 2px rgba(255, 138, 107, .7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attesa.lampeggia { animation: none; background: rgba(255, 138, 107, .25); box-shadow: 0 0 0 2px rgba(255, 138, 107, .7); }
+}
 .attesa:hover { background: rgba(255, 255, 255, .1); }
 .attesa-testa { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; }
 .attesa-testa span { font-size: 13px; opacity: .6; white-space: nowrap; }
