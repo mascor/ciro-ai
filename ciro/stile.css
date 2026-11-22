@@ -729,9 +729,17 @@ button {
   margin-bottom: 6px;
 }
 .consumo-titolo .eta { font-weight: 400; font-size: 15px; opacity: .55; white-space: nowrap; }
-/* issue #23: dato fermo da piu' di 15 minuti, grigio con l'eta' in ambra */
-.consumo.vecchio > :not(.consumo-titolo), .consumo.vecchio .consumo-titolo > span:first-child { opacity: .45; }
-.consumo.vecchio .eta { color: #f4b942; opacity: 1; }
+/* issue #23 e #49: dato fermo da piu' di 15 minuti (Ciro non riesce a leggere l'account): in rosso */
+.consumo.vecchio {
+  border-left: 4px solid #ff5a5a;
+  padding-left: 10px;
+  background: rgba(255, 90, 90, .08);
+  border-radius: 4px;
+}
+.consumo.vecchio > :not(.consumo-titolo) { opacity: .45; }
+.consumo.vecchio .consumo-titolo > span:first-child { color: #ff6b6b; }
+.consumo.vecchio .eta { color: #ff6b6b; opacity: 1; font-weight: 600; }
+.consumo.vecchio .eta::before { content: "⚠ "; }
 .barra-consumo {
   display: grid;
   grid-template-columns: 96px 1fr 52px;
