@@ -1164,6 +1164,25 @@ function disegnaDomande(elenco) {
     const testo = document.createElement("p");
     testo.textContent = attesa.testo;
     riga.append(testa, testo);
+    // appuntamento rosso: «Lo gestisco» ferma gli avvisi di quell'evento (#29)
+    if (diCalendario && !attesa.non_aggiornato && attesa.calendario_id) {
+      const pulsanti = document.createElement("div");
+      pulsanti.className = "opzioni";
+      const pulsante = document.createElement("button");
+      pulsante.type = "button";
+      pulsante.textContent = T("Lo gestisco");
+      pulsante.addEventListener("click", async (evento) => {
+        evento.stopPropagation();
+        pulsante.disabled = true;
+        try {
+          await fetch("/api/calendario/conferma", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chiave: attesa.calendario_id }) });
+          riga.remove();
+        } catch (errore) { pulsante.disabled = false; }
+      });
+      pulsanti.appendChild(pulsante);
+      riga.appendChild(pulsanti);
+    }
     // domanda strutturata: un pulsante per opzione, la risposta parte subito
     const opzioni = Object.entries(attesa.opzioni || {});
     if (attesa.domanda_id && opzioni.length) {

@@ -117,6 +117,7 @@ const EN_UI = {
   "Appuntamenti rossi": "Red appointments",
   "tra %s min": "in %s min",
   "Calendario": "Calendar",
+  "Lo gestisco": "I'll handle it",
   "%d non letto": "%d unread",
   "%d non letti": "%d unread",
   "%d spazio": "%d space",

@@ -57,6 +57,8 @@ def e_conferma(detto):
             and any(p in PAROLE_FORTI for p in parole))
 
 
+# conferma di un appuntamento rosso (#29); «sette, lo gestisco» porta anche il numero
+GESTISCO_RE = re.compile(r"\b(?:lo gestisco|ci penso io|ok lo so|i'?ll handle it|i will handle it|got it)\b")
 NO_RE = re.compile(r"^(no|annulla|lascia stare|non mandarlo|ferma|aspetta|cancel|don't|do not|stop|wait)\b")
 
 
@@ -644,6 +646,7 @@ class Cervello:
         self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
         self.chiudi_chat = None       # il server collega la chiusura di un messaggio di Chat
         self.ignora_chat = None       # e l'elenco delle chat da non avvisare piu' (#63)
+        self.conferma_calendario = None   # «lo gestisco»: il server ferma gli avvisi di quell'evento (#29)
         self.nascondi = None          # il server collega «chiudi cinque» (toglie una voce dal pannello)
         self.riassunto_perso = None   # il server collega «cosa mi sono perso» (dal -> frase)
         self.ultimo_utente_t = None   # l'ultima volta che l'utente ha detto qualcosa
@@ -891,6 +894,11 @@ class Cervello:
         if corretto is not None:
             return corretto
 
+        # «lo gestisco», «sette, lo gestisco»: un appuntamento rosso non va piu' ricordato (#29)
+        gestito = self._conferma_appuntamento(testo, detto_parole)
+        if gestito is not None:
+            return gestito
+
         # «tre, sì», «la tre: due», «domanda tre»: la domanda per numero
         per_numero = self._risposta_per_numero(testo, detto_parole)
         if per_numero is not None:
@@ -966,6 +974,22 @@ class Cervello:
         return t("Quale domanda? %s.") % "; ".join(
             "%s %s, %s" % (t("la"), modulo_numeri.parola(v["numero"], lingua()), v.get("progetto") or "?")
             for v in aperte[:5])
+
+    def _conferma_appuntamento(self, testo, detto):
+        """None se non e' una conferma di appuntamento. Con il numero conferma quell'appuntamento,
+        senza numero l'ultimo che Ciro ha detto (lo sceglie il server)."""
+        if not self.conferma_calendario or not GESTISCO_RE.search(detto):
+            return None
+        chiave = None
+        for parola in re.sub(GESTISCO_RE, " ", detto).replace(",", " ").split():
+            numero = modulo_numeri.DETTI.get(re.sub(r"^l'", "", parola))
+            voce = self.numeri.cerca(numero) if numero else None
+            if voce and str(voce.get("chiave", "")).startswith("calendario|"):
+                chiave = voce["chiave"][len("calendario|"):]
+                break
+        if not self.conferma_calendario(chiave):
+            return None if chiave is None else self._detto(testo, t("Non trovo quell'appuntamento."), False)
+        return self._detto(testo, t("Va bene, non te lo ricordo più."), False)
 
     def _risposta_per_numero(self, testo, detto):
         """La domanda indicata con il suo numero. None se il testo non lo fa."""
