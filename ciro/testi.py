@@ -143,6 +143,10 @@ EN = {
     "Ti ricordo il messaggio %s, da %s: %s.": "Reminder: message %s, from %s: %s.",
     "Va bene.": "OK.",
     "Appuntamento": "Appointment",
+    "tra un minuto": "in one minute",
+    "tra %d minuti": "in %d minutes",
+    "Alle %s hai %s, %s. Dimmi «lo gestisco».": "At %s you have %s, %s. Tell me «I'll handle it».",
+    "Appuntamento %s, ": "Appointment %s, ",
     "Calendario non aggiornato: non riesco a leggerlo da 10 minuti.": "Calendar not updated: I could not read it for 10 minutes.",
     "Va bene, non ti avviso più per questa chat.": "OK, no more alerts for this chat.",
     # numbered questions

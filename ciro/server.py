@@ -746,6 +746,44 @@ def sorveglia_calendario():
         time.sleep(60)
 
 
+# Voce (#28): dalla T-30 e poi ogni 5 minuti finche' non lo confermi (#29: _calendario_confermati).
+AVVISO_CALENDARIO = 30 * 60
+RIPETI_CALENDARIO = 5 * 60
+_promemoria_calendario = {}      # chiave evento -> ultima volta detto
+_calendario_confermati = set()   # chiavi degli eventi gia' confermati («lo gestisco», #29)
+
+
+def frase_calendario(voce):
+    minuti = voce.get("minuti") or 0
+    quando = t("tra un minuto") if minuti <= 1 else t("tra %d minuti") % minuti
+    frase = t("Alle %s hai %s, %s. Dimmi «lo gestisco».") % (
+        voce.get("ora") or "?", _testo_parlabile(voce.get("testo"))[:200], quando)
+    return con_numero(frase, voce.get("numero"), "Appuntamento %s, ")
+
+
+def giro_calendario_voce(voci, adesso=None):
+    """Dice gli appuntamenti rossi da 30 minuti prima, poi ogni 5 minuti; mai quelli confermati."""
+    adesso = time.time() if adesso is None else adesso
+    eventi = [v for v in voci if v.get("tipo") == "calendario" and not v.get("non_aggiornato")]
+    aperti = {v["calendario_id"] for v in eventi}
+    for chiave in [k for k in _promemoria_calendario if k not in aperti]:
+        del _promemoria_calendario[chiave]
+    if in_pausa("calendario"):
+        return
+    for voce in eventi:
+        chiave = voce["calendario_id"]
+        if chiave in _calendario_confermati or voce["inizio"] - adesso > AVVISO_CALENDARIO:
+            continue
+        ultima = _promemoria_calendario.get(chiave)
+        if ultima is not None and adesso - ultima < RIPETI_CALENDARIO:
+            continue
+        frase = frase_calendario(voce)
+        _promemoria_calendario[chiave] = adesso
+        _in_coda({"testo": frase, "da": "calendario", "progetto": "calendario", "quando": adesso})
+        _cervello.annota_avviso("calendario", frase, domanda=False)
+        registra("calendario-avviso", evento=chiave.split("|")[0] + "|…", ripetuto=ultima is not None)
+
+
 def voci_calendario(adesso=None):
     """Le righe di «Ti aspettano» per gli eventi rossi (voce e conferma: #28, #29)."""
     adesso = time.time() if adesso is None else adesso
@@ -1110,6 +1148,7 @@ def giro_avvisi():
         registra("avviso", testo=frase)
     _visti = set(chiavi)
     giro_chat()
+    giro_calendario_voce(voci)
 
 
 def sorveglia_attese():
