@@ -1,4 +1,4 @@
-"""Red calendar events in «Ti aspettano» (#27): on top, with number, time and calendar; not spoken yet.
+"""Red calendar events in «Ti aspettano» (#27) and spoken from T-30, every 5 minutes (#28).
 
 Run from ciro/: python3 -m unittest tests.test_calendario_pannello
 All names are fake; no network (the reader gets fake answers).
@@ -52,12 +52,65 @@ class TestCalendarioPannello(BaseCiro):
         self.assertTrue(primo["chiave"].startswith("calendario|work|a|"))
         self.assertEqual(len(self.calendario_in_attesa()), 2)
 
-    def test_non_detto_a_voce_per_ora(self):
-        server.giro_avvisi()                                       # first round: what is there is known
+    def detti(self):
+        return [v["testo"] for v in self.coda() if v.get("da") == "calendario"]
+
+    def test_detto_a_trenta_minuti(self):
+        server._promemoria_calendario.clear()
+        server._calendario_confermati.clear()
+        self.risposte["work"] = [evento("a", 20, self.adesso)]
+        server.giro_calendario(self.adesso)
+        server.giro_calendario_voce(server.attese(), self.adesso)
+        detti = self.detti()
+        self.assertEqual(len(detti), 1, detti)
+        self.assertTrue(detti[0].startswith("Appuntamento "), detti[0])
+        self.assertIn("Call with Rossi", detti[0])
+        self.assertIn("lo gestisco", detti[0])
+
+    def test_non_prima_di_trenta_minuti(self):
+        server._promemoria_calendario.clear()
+        self.risposte["work"] = [evento("a", 33, self.adesso)]
+        server.giro_calendario(self.adesso)
+        server.giro_calendario_voce(server.attese(), self.adesso)
+        self.assertEqual(self.detti(), [])
+        self.assertEqual(len(self.calendario_in_attesa()), 1)      # in the panel already
+
+    def test_ripetuto_ogni_cinque_minuti(self):
+        server._promemoria_calendario.clear()
+        self.risposte["work"] = [evento("a", 25, self.adesso)]
+        server.giro_calendario(self.adesso)
+        voci = server.attese()
+        server.giro_calendario_voce(voci, self.adesso)
+        server.giro_calendario_voce(voci, self.adesso + 120)       # 2 min: not yet
+        self.assertEqual(len(self.detti()), 1)
+        server.giro_calendario_voce(voci, self.adesso + 301)       # 5 min: again
+        self.assertEqual(len(self.detti()), 2)
+
+    def test_confermato_silenzio(self):
+        server._promemoria_calendario.clear()
         self.risposte["work"] = [evento("a", 10, self.adesso)]
         server.giro_calendario(self.adesso)
-        server.giro_avvisi()
-        self.assertEqual(self.coda(), [])                          # voice comes with #28
+        voci = server.attese()
+        server._calendario_confermati.add(server._eventi_calendario[0]["chiave"])
+        self.addCleanup(server._calendario_confermati.clear)
+        server.giro_calendario_voce(voci, self.adesso)
+        self.assertEqual(self.detti(), [])
+
+    def test_pausa_rispettata(self):
+        server._promemoria_calendario.clear()
+        self.risposte["work"] = [evento("a", 10, self.adesso)]
+        server.giro_calendario(self.adesso)
+        voci = server.attese()
+        server.imposta_pausa(True)
+        self.addCleanup(server.imposta_pausa, False)
+        server.giro_calendario_voce(voci, self.adesso)
+        self.assertEqual(self.detti(), [])
+
+    def test_non_aggiornato_non_detto(self):
+        self.guasto = True
+        server.giro_calendario(self.adesso)
+        server.giro_calendario_voce(server.attese(), self.adesso)
+        self.assertEqual(self.detti(), [])
 
     def test_iniziato_sparisce(self):
         self.risposte["work"] = [evento("a", 1, self.adesso)]
