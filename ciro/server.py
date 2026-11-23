@@ -73,6 +73,7 @@ _coda_lock = threading.Lock()
 _cervello = modulo_cervello.Cervello()
 _cervello.chiudi_chat = lambda chiave: _chat.chiudi(chiave)
 _cervello.ignora_chat = lambda chiave: _chat.ignora(chiave)
+_cervello.conferma_calendario = lambda chiave: conferma_calendario(chiave)
 _cervello.nascondi = lambda chiave: nascondi(chiave)
 _cervello.riassunto_perso = lambda dal: frase_perso(dal)
 _cervello_lock = threading.Lock()
@@ -746,11 +747,47 @@ def sorveglia_calendario():
         time.sleep(60)
 
 
-# Voce (#28): dalla T-30 e poi ogni 5 minuti finche' non lo confermi (#29: _calendario_confermati).
+# Voce (#28): dalla T-30 e poi ogni 5 minuti finche' non lo confermi (#29: calendario_confermati).
 AVVISO_CALENDARIO = 30 * 60
 RIPETI_CALENDARIO = 5 * 60
 _promemoria_calendario = {}      # chiave evento -> ultima volta detto
-_calendario_confermati = set()   # chiavi degli eventi gia' confermati («lo gestisco», #29)
+CONFERMA_DURA = 24 * 3600
+
+
+def _file_confermati():
+    return Path(modulo_cervello.CONTESTO).with_name("calendario-confermati.json")
+
+
+def calendario_confermati(adesso=None):
+    """{chiave: quando} delle conferme del giorno: restano dopo un riavvio (#29)."""
+    adesso = time.time() if adesso is None else adesso
+    try:
+        dati = json.loads(_file_confermati().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in dati.items() if isinstance(v, (int, float)) and adesso - v < CONFERMA_DURA}
+
+
+def conferma_calendario(chiave=None, adesso=None):
+    """«lo gestisco» o il pulsante: niente piu' avvisi per quell'evento. Senza chiave: l'ultimo
+    appuntamento detto a voce. False se non c'e' niente da confermare."""
+    adesso = time.time() if adesso is None else adesso
+    if chiave is None:
+        detti = sorted(_promemoria_calendario.items(), key=lambda kv: kv[1])
+        if not detti:
+            return False
+        chiave = detti[-1][0]
+    if chiave not in {e["chiave"] for e in _eventi_calendario}:
+        return False
+    confermati = calendario_confermati(adesso)
+    confermati[chiave] = adesso
+    try:
+        _file_confermati().write_text(json.dumps(confermati), encoding="utf-8")
+    except OSError:
+        pass
+    _promemoria_calendario.pop(chiave, None)
+    registra("calendario-confermato", evento=chiave.split("|")[0] + "|…")
+    return True
 
 
 def frase_calendario(voce):
@@ -772,7 +809,7 @@ def giro_calendario_voce(voci, adesso=None):
         return
     for voce in eventi:
         chiave = voce["calendario_id"]
-        if chiave in _calendario_confermati or voce["inizio"] - adesso > AVVISO_CALENDARIO:
+        if voce["inizio"] - adesso > AVVISO_CALENDARIO:
             continue
         ultima = _promemoria_calendario.get(chiave)
         if ultima is not None and adesso - ultima < RIPETI_CALENDARIO:
@@ -788,9 +825,10 @@ def voci_calendario(adesso=None):
     """Le righe di «Ti aspettano» per gli eventi rossi (voce e conferma: #28, #29)."""
     adesso = time.time() if adesso is None else adesso
     voci = []
+    confermati = calendario_confermati(adesso)
     for evento in _eventi_calendario:
-        if evento["inizio"] < adesso:
-            continue   # e' iniziato: non serve piu' l'avviso
+        if evento["inizio"] < adesso or evento["chiave"] in confermati:
+            continue   # iniziato o confermato («lo gestisco»): non serve piu' l'avviso
         minuti = max(0, int((evento["inizio"] - adesso) // 60))
         voci.append({"progetto": "calendario", "tipo": "calendario", "a_voce": False,
                      "calendario_id": evento["chiave"], "account": evento["account"],
@@ -2116,6 +2154,9 @@ class Gestore(BaseHTTPRequestHandler):
                     modulo_cervello.imposta("lingua", dato["lingua"])
                     registra("lingua", lingua=dato["lingua"])
                 self._invia(200, json.dumps({"lingua": lingua()}))
+            elif percorso == "/api/calendario/conferma":
+                chiave = str(json.loads(corpo or b"{}").get("chiave") or "")
+                self._invia(200, json.dumps({"confermato": bool(chiave) and conferma_calendario(chiave)}))
             elif percorso == "/api/nascondi":
                 voce = nascondi(str(json.loads(corpo or b"{}").get("chiave") or ""))
                 self._invia(200, json.dumps({"nascosta": voce is not None}))

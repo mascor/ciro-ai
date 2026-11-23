@@ -29,6 +29,7 @@ class TestCalendarioPannello(BaseCiro):
             return {"items": self.risposte.get(account, [])}
 
         server._calendario = calendario.Lettore(scarica, lambda: {"work": {"calendari": ["primary"]}})
+        server._cervello.conferma_calendario = server.conferma_calendario   # BaseCiro makes a new Cervello
         server._eventi_calendario = []
         server._calendario_non_aggiornati = []
         self.addCleanup(setattr, server, "_eventi_calendario", [])
@@ -57,7 +58,6 @@ class TestCalendarioPannello(BaseCiro):
 
     def test_detto_a_trenta_minuti(self):
         server._promemoria_calendario.clear()
-        server._calendario_confermati.clear()
         self.risposte["work"] = [evento("a", 20, self.adesso)]
         server.giro_calendario(self.adesso)
         server.giro_calendario_voce(server.attese(), self.adesso)
@@ -90,11 +90,46 @@ class TestCalendarioPannello(BaseCiro):
         server._promemoria_calendario.clear()
         self.risposte["work"] = [evento("a", 10, self.adesso)]
         server.giro_calendario(self.adesso)
+        self.assertTrue(server.conferma_calendario(server._eventi_calendario[0]["chiave"], self.adesso))
         voci = server.attese()
-        server._calendario_confermati.add(server._eventi_calendario[0]["chiave"])
-        self.addCleanup(server._calendario_confermati.clear)
+        self.assertEqual(self.calendario_in_attesa(), [])          # out of the panel too
         server.giro_calendario_voce(voci, self.adesso)
         self.assertEqual(self.detti(), [])
+
+    def test_lo_gestisco_a_voce_l_ultimo_detto(self):
+        server._promemoria_calendario.clear()
+        self.risposte["work"] = [evento("a", 10, self.adesso), evento("b", 20, self.adesso, titolo="Visit")]
+        server.giro_calendario(self.adesso)
+        server.giro_calendario_voce(server.attese(), self.adesso)    # says both
+        esito = server._cervello.chiedi("lo gestisco")
+        self.assertEqual(esito["risposta"], "Va bene, non te lo ricordo più.")
+        rimasti = [v["testo"] for v in self.calendario_in_attesa()]
+        self.assertEqual(len(rimasti), 1)                            # the last one said is confirmed
+
+    def test_numero_e_lo_gestisco(self):
+        server._promemoria_calendario.clear()
+        self.risposte["work"] = [evento("a", 10, self.adesso), evento("b", 20, self.adesso, titolo="Visit")]
+        server.giro_calendario(self.adesso)
+        voci = self.calendario_in_attesa()
+        primo = [v for v in voci if v["testo"] == "Call with Rossi"][0]
+        from numeri import parola
+        esito = server._cervello.chiedi("%s, ci penso io" % parola(primo["numero"], "it"))
+        self.assertEqual(esito["risposta"], "Va bene, non te lo ricordo più.")
+        self.assertEqual([v["testo"] for v in self.calendario_in_attesa()], ["Visit"])
+
+    def test_lo_gestisco_senza_appuntamenti_non_e_per_il_calendario(self):
+        server._promemoria_calendario.clear()
+        self.assertFalse(server.conferma_calendario(None, self.adesso))
+        # nothing to confirm: the phrase goes on to the normal answer (never the model in tests)
+        self.assertIsNone(server._cervello._conferma_appuntamento("lo gestisco", "lo gestisco"))
+
+    def test_conferma_resta_dopo_riavvio_e_scade(self):
+        self.risposte["work"] = [evento("a", 10, self.adesso)]
+        server.giro_calendario(self.adesso)
+        chiave = server._eventi_calendario[0]["chiave"]
+        server.conferma_calendario(chiave, self.adesso)
+        self.assertIn(chiave, server.calendario_confermati(self.adesso + 60))      # read back from the file
+        self.assertNotIn(chiave, server.calendario_confermati(self.adesso + 86401))
 
     def test_pausa_rispettata(self):
         server._promemoria_calendario.clear()
