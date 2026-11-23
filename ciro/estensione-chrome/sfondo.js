@@ -114,4 +114,16 @@ chrome.alarms.onAlarm.addListener((allarme) => {
   aggiornaSeServe();
 });
 chrome.runtime.onStartup.addListener(() => { giro(); aggiornaSeServe(); });
-chrome.runtime.onInstalled.addListener(giro);
+// issue #56: dopo un aggiornamento le schede gia' aperte non parlano piu' con
+// l'estensione nuova: ricarico quelle di Google Chat (i consumi li legge lo sfondo)
+async function ricaricaSchedeChat() {
+  const schede = await chrome.tabs.query({
+    url: ["https://chat.google.com/*", "https://mail.google.com/chat/*"],
+  });
+  for (const scheda of schede) chrome.tabs.reload(scheda.id).catch(() => {});
+}
+
+chrome.runtime.onInstalled.addListener((dettagli) => {
+  giro();
+  if (dettagli.reason === "update") ricaricaSchedeChat().catch((errore) => console.warn("schede di Chat", errore));
+});
