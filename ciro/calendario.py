@@ -11,6 +11,7 @@ the OAuth client in ~/.config/ciro/calendario-client.json: never in the reposito
 """
 
 import json
+import re
 import os
 import subprocess
 import time
@@ -143,3 +144,127 @@ def scarica_google(account, calendario, time_min, time_max):
                                        headers={"Authorization": "Bearer " + _accesso(account)})
     with urllib.request.urlopen(richiesta, timeout=15) as risposta:
         return json.load(risposta)
+
+
+# --- Chrome extension (#70): the open Google Calendar tab, no Google Cloud setup ------------
+
+MESI = {m: i + 1 for i, m in enumerate(
+    "gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre".split())}
+MESI.update({m: i + 1 for i, m in enumerate(
+    "january february march april may june july august september october november december".split())})
+_MESE = "|".join(sorted(MESI, key=len, reverse=True))
+DATA_GM_RE = re.compile(r"\b(\d{1,2})\s+(%s)\s+(\d{4})\b" % _MESE, re.I)          # 23 novembre 2026
+DATA_MG_RE = re.compile(r"\b(%s)\s+(\d{1,2}),?\s+(\d{4})\b" % _MESE, re.I)         # November 23, 2026
+ORA_RE = re.compile(r"\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\b", re.I)
+# Google's «Pomodoro» / Tomato: (213, 0, 0) in the light theme; (218, 82, 52) in the dark theme,
+# measured on the maintainer's test event on 23/11/2026. Orange (227, 104, 62) must stay out.
+TOMATO = ((213, 0, 0), (218, 82, 52))
+MARGINE_ROSSO = 12
+PAGINA = "pagina"             # calendar name for events read from the tab
+SILENZIO_PAGINA = 120         # a tab silent for 2 minutes is a failed read (stale after VECCHIO_DOPO)
+
+
+def e_rosso(css):
+    """True for Tomato in any notation the page uses (rgb, rgba, #d50000), with a small margin."""
+    testo = (css or "").strip().lower()
+    if testo.startswith("#") and len(testo) == 7:
+        valori = tuple(int(testo[i:i + 2], 16) for i in (1, 3, 5))
+    else:
+        numeri = re.findall(r"\d+", testo)[:3]
+        if len(numeri) < 3:
+            return False
+        valori = tuple(int(n) for n in numeri)
+    return any(all(abs(a - b) <= MARGINE_ROSSO for a, b in zip(valori, rosso)) for rosso in TOMATO)
+
+
+def inizio_da_etichetta(testo):
+    """Start of the event (epoch, local time) from the chip label, or None (all-day, no date)."""
+    testo = testo or ""
+    data = DATA_GM_RE.search(testo)
+    if data:
+        giorno, mese, anno = int(data.group(1)), MESI[data.group(2).lower()], int(data.group(3))
+    else:
+        data = DATA_MG_RE.search(testo)
+        if not data:
+            return None
+        mese, giorno, anno = MESI[data.group(1).lower()], int(data.group(2)), int(data.group(3))
+    # the time comes before the date: «15:30 - 16:00, ...» or «3:30pm to 4pm, ...»
+    prima = testo[:data.start()]
+    for ora in ORA_RE.finditer(prima):
+        dopo_parola = re.search(r"(?:dalle|from|ore|at)\s*$", prima[:ora.start()], re.I)
+        if ora.group(2) is None and not ora.group(3) and not dopo_parola:
+            continue   # a bare number is not a time, unless «dalle 9», «from 9»
+        ore, minuti = int(ora.group(1)), int(ora.group(2) or 0)
+        suffisso = (ora.group(3) or "").lower()
+        if suffisso == "pm" and ore < 12:
+            ore += 12
+        if suffisso == "am" and ore == 12:
+            ore = 0
+        if ore > 23 or minuti > 59:
+            continue
+        try:
+            return int(time.mktime((anno, mese, giorno, ore, minuti, 0, 0, 0, -1)))
+        except (OverflowError, ValueError):
+            return None
+    return None
+
+
+class FonteEstensione:
+    """The last list each calendar tab sent; serves the Lettore like the Google API would."""
+
+    def __init__(self):
+        self._pagine = {}          # account -> (time received, list from the page)
+
+    def ricevi(self, account, eventi, adesso=None):
+        """Keeps the list and returns counts for the log (never titles)."""
+        adesso = time.time() if adesso is None else adesso
+        account = str(account or "?")[:120]
+        pulite = [e for e in (eventi or []) if isinstance(e, dict) and e.get("id")][:200]
+        self._pagine[account] = (adesso, pulite)
+        rossi = [e for e in pulite if e_rosso(e.get("colore"))]
+        colori = {}
+        # calibration (#70): the colour of the maintainer's test event «Prova Ciro» (title chosen by him)
+        prova = [[str(e.get("colore") or "nessuno")[:30], inizio_da_etichetta(e.get("testo")),
+                  re.sub(r"[A-Za-zÀ-ÿ]", "x", str(e.get("testo") or ""))[:120]] for e in pulite
+                 if "prova ciro" in str(e.get("testo") or "").lower()]
+        for evento in pulite:
+            colore = str(evento.get("colore") or "nessuno")[:30]
+            colori[colore] = colori.get(colore, 0) + 1
+        return {"eventi": len(pulite), "rossi": len(rossi),
+                "rossi_con_ora": sum(1 for e in rossi if inizio_da_etichetta(e.get("testo"))),
+                "con_ora": sum(1 for e in pulite if inizio_da_etichetta(e.get("testo"))),
+                "colori": dict(sorted(colori.items(), key=lambda kv: -kv[1])[:8]),
+                **({"colore_prova_ciro": prova} if prova else {})}
+
+    def account(self, adesso=None):
+        adesso = time.time() if adesso is None else adesso
+        return {a: {"calendari": [PAGINA]} for a, (quando, _) in self._pagine.items() if adesso - quando < 86400}
+
+    def scarica(self, account, calendario, time_min, time_max):
+        quando, eventi = self._pagine.get(account, (0, []))
+        if time.time() - quando > SILENZIO_PAGINA:
+            raise TimeoutError("scheda del calendario chiusa o ferma")
+        voci = []
+        for evento in eventi:
+            inizio = inizio_da_etichetta(evento.get("testo"))
+            if inizio is None:
+                continue
+            voci.append({"id": str(evento["id"])[:200], "status": "confirmed",
+                         "colorId": ROSSO if e_rosso(evento.get("colore")) else "",
+                         "summary": titolo_da_etichetta(evento.get("testo")),
+                         "start": {"dateTime": rfc3339(inizio)}})
+        return {"items": voci}
+
+
+def titolo_da_etichetta(testo):
+    """The title is the first part of the label that is not a time: «15:30 - 16:00, Call, ...»."""
+    for parte in (testo or "").split(","):
+        parte = parte.strip()
+        if parte and not ORARIO_RE.fullmatch(parte):
+            return parte[:120]
+    return ""
+
+
+# «15:30 - 16:00», «dalle 15:30 alle 16», «3:30pm to 4pm»: a time or a time range, not a title
+_ORA = r"\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?"
+ORARIO_RE = re.compile(r"(?:dalle\s+|from\s+)?%s(?:\s*(?:-|–|—|to|alle|a)\s*%s)?" % (_ORA, _ORA), re.I)

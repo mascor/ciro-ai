@@ -64,7 +64,8 @@ function giro() {
 }
 
 // Google Chat: i non letti di ogni scheda di Chat vanno a Ciro
-const CIRO_CHAT = { "chat-non-letti": "http://127.0.0.1:8765/api/chat/non-letti" };
+const CIRO_CHAT = { "chat-non-letti": "http://127.0.0.1:8765/api/chat/non-letti",
+                    "calendario-eventi": "http://127.0.0.1:8765/api/calendario/eventi" };
 chrome.runtime.onMessage.addListener((messaggio) => {
   const indirizzo = messaggio && CIRO_CHAT[messaggio.tipo];
   if (!indirizzo || !messaggio.dato) return;
@@ -118,7 +119,7 @@ chrome.runtime.onStartup.addListener(() => { giro(); aggiornaSeServe(); });
 // l'estensione nuova: ricarico quelle di Google Chat (i consumi li legge lo sfondo)
 async function ricaricaSchedeChat() {
   const schede = await chrome.tabs.query({
-    url: ["https://chat.google.com/*", "https://mail.google.com/chat/*"],
+    url: ["https://chat.google.com/*", "https://mail.google.com/chat/*", "https://calendar.google.com/*"],
   });
   for (const scheda of schede) chrome.tabs.reload(scheda.id).catch(() => {});
 }
