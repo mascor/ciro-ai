@@ -933,6 +933,7 @@ button {
 
 /* messaggi di Google Chat in «Ti aspettano»: urgenti in evidenza */
 .attesa.chat { border-left-color: #5aa9e6; cursor: default; }
+.attesa.calendario { border-left-color: #e8453c; background: rgba(232, 69, 60, .12); cursor: default; }
 .attesa.chat.urgente { border-left-color: #f0606a; background: rgba(240, 96, 106, .10); }
 
 

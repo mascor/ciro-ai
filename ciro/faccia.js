@@ -1103,7 +1103,13 @@ function disegnaAttese(elenco) {
     return;
   }
   const chat = elenco.filter((a) => a.tipo === "chat");
-  const sessioni = elenco.filter((a) => a.tipo !== "chat");
+  const appuntamenti = elenco.filter((a) => a.tipo === "calendario");
+  const sessioni = elenco.filter((a) => a.tipo !== "chat" && a.tipo !== "calendario");
+  // appuntamenti rossi del calendario: in cima, non si possono spostare (M6)
+  if (appuntamenti.length) {
+    pannelloAttese.appendChild(gruppo(T("Appuntamenti rossi"), appuntamenti.filter((a) => !a.non_aggiornato).length));
+    disegnaDomande(appuntamenti);
+  }
   // i messaggi di Chat urgenti (giudicati da DeepSeek) stanno in cima, gia' aperti
   const urgenti = chat.filter((a) => a.urgente);
   const altri = chat.filter((a) => !a.urgente);
@@ -1123,16 +1129,19 @@ function disegnaDomande(elenco) {
   for (const attesa of elenco) {
     const riga = document.createElement("li");
     const diChat = attesa.tipo === "chat";
-    riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : diChat ? "chat" : "posta") +
+    const diCalendario = attesa.tipo === "calendario";
+    riga.className = "attesa " + (attesa.tipo === "domanda" ? "" : diCalendario ? "calendario"
+      : diChat ? "chat" : "posta") +
       (diChat && attesa.urgente ? " urgente" : "") +
-      (diChat ? "" : " lampeggia");   // issue #50: una sessione ti aspetta
+      (diChat || diCalendario ? "" : " lampeggia");   // issue #50: una sessione ti aspetta
     riga.title = diChat ? (attesa.motivo || attesa.testo || "") : T("Clicca per rispondere a %s", attesa.progetto);
     const testa = document.createElement("div");
     testa.className = "attesa-testa";
     const progetto = document.createElement("b");
     // un messaggio di Google Chat: chi scrive al posto del progetto
     // il nome dato alla sessione con /rename, se c'e', prima del progetto
-    progetto.textContent = diChat ? (attesa.mittente || "?")
+    progetto.textContent = diCalendario ? (attesa.non_aggiornato ? T("Calendario") : attesa.ora || "?")
+      : diChat ? (attesa.mittente || "?")
       : (attesa.sessione && attesa.sessione.toLowerCase() !== String(attesa.progetto || "").toLowerCase()
         ? `${attesa.sessione} · ${attesa.progetto}` : (attesa.progetto || "?"));
     progetto.title = progetto.textContent;   // il nome intero quando e' tagliato
@@ -1146,7 +1155,10 @@ function disegnaDomande(elenco) {
     const quando = document.createElement("span");
     // la casella intera: con piu' profili si capisce dove e' arrivato
     const dove = diChat ? "Chat " + String(attesa.account || "") : T(attesa.tipo);
-    quando.textContent = `${dove} · ${testoAttesa(attesa.secondi)}`;
+    quando.textContent = diCalendario
+      ? [attesa.account, attesa.calendario, attesa.non_aggiornato ? "" : T("tra %s min", attesa.minuti)]
+        .filter(Boolean).join(" · ")
+      : `${dove} · ${testoAttesa(attesa.secondi)}`;
     if (attesa.chiave) quando.appendChild(bottoneChiudi(attesa));
     testa.append(progetto, quando);
     const testo = document.createElement("p");
@@ -1173,7 +1185,7 @@ function disegnaDomande(elenco) {
       riga.appendChild(pulsanti);
     }
     // clic: apre la chat pronta per rispondere a quella sessione tramite Ciro
-    if (!diChat) riga.addEventListener("click", () => {
+    if (!diChat && !diCalendario) riga.addEventListener("click", () => {
       chat.classList.add("aperta");
       chatTesto.value = T("Di' a %s: ", attesa.progetto);
       chatTesto.focus();

@@ -114,6 +114,9 @@ const EN_UI = {
   // waiting list in groups (19/11/2026)
   "Domande delle sessioni": "Session questions",
   "Urgenti in Google Chat": "Urgent in Google Chat",
+  "Appuntamenti rossi": "Red appointments",
+  "tra %s min": "in %s min",
+  "Calendario": "Calendar",
   "%d non letto": "%d unread",
   "%d non letti": "%d unread",
   "%d spazio": "%d space",

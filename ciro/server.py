@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cervello as modulo_cervello
 from testi import lingua, t  # noqa: E402
+import calendario as modulo_calendario
 import chat as modulo_chat
 import nome as modulo_nome
 import numeri as numeri_parlati
@@ -722,6 +723,49 @@ AZIONI_PER_TE = {"decisione": "decisione", "conferma-server": "conferma sul serv
 SENZA_SESSIONE_MAX = 2 * 3600
 
 
+# ------------------------------------------- avvisi dal calendario (M6)
+# Eventi rossi dei prossimi 35 minuti: letti ogni 60 s in sottofondo (mai dentro attese(),
+# che gira ogni 8 s e non deve aspettare la rete). Senza account collegati non legge niente.
+_calendario = modulo_calendario.Lettore(modulo_calendario.scarica_google)
+_eventi_calendario = []
+_calendario_non_aggiornati = []
+
+
+def giro_calendario(adesso=None):
+    global _eventi_calendario, _calendario_non_aggiornati
+    _eventi_calendario = _calendario.leggi(adesso)
+    _calendario_non_aggiornati = _calendario.non_aggiornati(adesso)
+
+
+def sorveglia_calendario():
+    while True:
+        try:
+            giro_calendario()
+        except Exception as errore:  # noqa: BLE001
+            registra("errore-calendario", errore=repr(errore)[:300])
+        time.sleep(60)
+
+
+def voci_calendario(adesso=None):
+    """Le righe di «Ti aspettano» per gli eventi rossi (voce e conferma: #28, #29)."""
+    adesso = time.time() if adesso is None else adesso
+    voci = []
+    for evento in _eventi_calendario:
+        if evento["inizio"] < adesso:
+            continue   # e' iniziato: non serve piu' l'avviso
+        minuti = max(0, int((evento["inizio"] - adesso) // 60))
+        voci.append({"progetto": "calendario", "tipo": "calendario", "a_voce": False,
+                     "calendario_id": evento["chiave"], "account": evento["account"],
+                     "calendario": evento["calendario"], "ora": time.strftime("%H:%M", time.localtime(evento["inizio"])),
+                     "inizio": evento["inizio"], "minuti": minuti, "link": evento.get("link") or "",
+                     "testo": (evento.get("titolo") or t("Appuntamento"))[:280], "secondi": 0})
+    for account in _calendario_non_aggiornati:
+        voci.append({"progetto": "calendario", "tipo": "calendario", "a_voce": False,
+                     "calendario_id": "lettura|" + account, "account": account, "non_aggiornato": True,
+                     "testo": t("Calendario non aggiornato: non riesco a leggerlo da 10 minuti."), "secondi": 0})
+    return voci
+
+
 def attese(sessioni=None):
     """Cosa aspetta l'utente: sessioni ferme su una sua risposta e
     messaggi della posta che chiedono una decisione, una conferma o un accesso."""
@@ -819,6 +863,8 @@ def attese(sessioni=None):
                        "urgente": False, "a_voce": False, "secondi": secondi})
     # prima chi aspetta da piu' tempo; i messaggi di Chat non urgenti in fondo
     elenco.sort(key=lambda v: (v.get("tipo") == "chat" and not v.get("urgente"), -v["secondi"]))
+    # gli appuntamenti rossi in cima, il piu' vicino per primo (non si possono spostare)
+    elenco = sorted(voci_calendario(adesso_s), key=lambda v: v.get("inizio") or float("inf")) + elenco
     elenco = togli_nascoste(elenco)
     numera(elenco)
     for voce in elenco:
@@ -829,6 +875,8 @@ def attese(sessioni=None):
 def chiave_numero(voce):
     if voce.get("chat_id"):
         return "chat|" + voce["chat_id"]   # stesso numero finche' la conversazione resta aperta
+    if voce.get("calendario_id"):
+        return "calendario|" + voce["calendario_id"]
     return voce.get("domanda_id") or _chiave(voce)
 
 
@@ -2088,6 +2136,7 @@ def avvia(porta):
         sys.exit(1)
     threading.Thread(target=sorveglia_attese, daemon=True).start()
     threading.Thread(target=sorveglia_domande, daemon=True).start()
+    threading.Thread(target=sorveglia_calendario, daemon=True).start()
     server.serve_forever()
 
 
