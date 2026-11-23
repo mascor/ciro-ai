@@ -41,7 +41,7 @@ The page has three columns:
 | Left column | Centre | Right column |
 |---|---|---|
 | **How much is left**: usage of your Claude accounts, OpenCode Go and DeepSeek credit | Ciro's face: it moves its mouth with the real audio, sleeps when switched off, and shows subtitles of what you said and what it says | **Sessions**: one card per open Claude Code session, titled `owner/repository`, with its state, how long it has been in that state and a one-line summary |
-| **Waiting for you**: the questions that need your answer, oldest first | | Sessions waiting for you go first, with an amber background and a slowly "breathing" border; same owner, same colour |
+| **Waiting for you**: red calendar appointments first (closest first, with a «Lo gestisco» button), then the questions that need your answer, oldest first | | Sessions waiting for you go first, with an amber background and a slowly "breathing" border; same owner, same colour |
 
 The right column always fits on screen: with many sessions it shortens the summaries and
 then reduces the text size instead of scrolling.
@@ -264,6 +264,8 @@ The first answer takes a few seconds while the voice and speech models load; aft
 | "due per alpha-bot" | answers that project's question |
 | "chiudi cinque" ("close five") or the **×** on the panel | hides item five until something new arrives (a new question from that session, a new Chat message); the session's question stays unanswered |
 | "annulla" / "rispondi due" (within 2 min) | sends a correction for the answer just given |
+| "lo gestisco" / "ci penso io" ("I'll handle it"), or "sette, lo gestisco" | stops the alerts of the red appointment just announced (or number seven) for the rest of the day |
+| "ignora l'undici" / "silenzia l'undici" | never alerts again for the Google Chat conversation of message eleven |
 | "da ora in poi …" ("from now on …") | saves a general rule |
 | "da ora chiedimi sempre prima di pubblicare X" | removes the automatic test-deploy rule for X |
 | "riepilogo ogni ora" / "niente riepiloghi" | changes the summaries |
@@ -312,6 +314,17 @@ All tests use temporary folders (`POSTA_RADICE`, `CIRO_AUTORIZZAZIONI`, `FACCIA_
 fake model: they never touch your real mailbox, Keychain or sessions.
 
 ---
+
+### Calendar alerts
+
+Appointments you colour **Tomato** (the full red) in Google Calendar cannot be moved: Ciro
+shows them in «Ti aspettano» from 35 minutes before, says them from 30 minutes before
+(«Appuntamento sette, alle 15:30 hai …») and repeats every 5 minutes until you say
+«lo gestisco» or press the button. The «Ciro Agente» Chrome extension reads them from the
+Google Calendar tab you keep open (one per account), the same way it reads Google Chat: no
+Google Cloud setup. The log keeps only counts and colours, never titles. As an alternative
+that works with the tab closed, `ciro/strumenti/collega_calendario.py` links an account
+read-only through Google's API (design: `docs/calendar-alerts-design.md`).
 
 ## Roadmap
 
