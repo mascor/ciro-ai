@@ -346,7 +346,18 @@ def nota_ascolto_nome(testo, chiamato, adesso=None):
     return imparate
 
 
+# risposte vere che si ripetono («no no no», «sì sì sì»): mai rumore
+RISPOSTE_RIPETIBILI = {"s\u00ec", "si", "no", "ok", "yes", "uno", "due", "tre", "a", "b", "c",
+                       "dai", "vai", "fai", "ciro", "stop", "basta", "ehi"}
+
+
 def solo_verso(testo):
+    """Un verso («ehm», «pff») o un suono ripetuto («PIP PIP PIP», «bip bip bip»):
+    whisper scrive cosi' bip, tasti e colpi. Una parola corta ripetuta 3+ volte e' rumore."""
+    parole = re.findall(r"[a-z\u00e0-\u00f9]+", (testo or "").lower())
+    if len(parole) >= 3 and len(set(parole)) == 1 and len(parole[0]) <= 4 \
+            and parole[0] not in RISPOSTE_RIPETIBILI:
+        return True
     return bool(VERSO_RE.match(re.sub(r"[^a-z]", "", (testo or "").lower())))
 
 

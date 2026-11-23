@@ -143,6 +143,7 @@ let ultimaFraseDetta = "";
 let modoAscolto = "nome";   // "nome" | "sempre"
 try { if (localStorage.getItem("ciro-ascolto") === "sempre") modoAscolto = "sempre"; } catch (errore) { /* resta "nome" */ }
 let finestraFino = 0;
+let rispostaSenzaNome = false;   // l'ultima frase al cervello e' arrivata senza «Ciro»
 function serveNome() {
   return modoAscolto === "nome" && !calibrando && performance.now() > finestraFino;
 }
@@ -348,7 +349,10 @@ async function prossimo() {
   if (!coda.length) {
     inCorso = false;
     // ha appena parlato: puoi rispondere senza «Ciro» (un minuto se ha fatto una domanda)
-    if (sveglia) apriFinestra(/\?\s*$/.test(ultimaFraseDetta) ? FINESTRA_DOMANDA : FINESTRA_CONVERSAZIONE);
+    // ma se rispondeva a una frase detta senza «Ciro», solo la finestra corta:
+    // un rumore preso per risposta non deve tenere aperto l'ascolto (issue #61)
+    const domanda = /\?\s*$/.test(ultimaFraseDetta) && !rispostaSenzaNome;
+    if (sveglia) apriFinestra(domanda ? FINESTRA_DOMANDA : FINESTRA_CONVERSAZIONE);
     if (fase === "parlo") impostaFase(micAttivo ? "ascolto" : "pronto");
     return;
   }
@@ -717,10 +721,13 @@ async function inviaDiscorso(pezzi, pause) {
         return;
       }
       testo = dato.resto;
+      rispostaSenzaNome = false;
     } else if (serveNome()) {      // non l'hai chiamato: rumore, tastiera, altre persone
       evento("ignorato-senza-nome", testo.slice(0, 60));
       impostaFase("ascolto");
       return;
+    } else {                       // senza «Ciro», dentro la finestra (o ascolto sempre)
+      rispostaSenzaNome = true;
     }
     aggiungiMessaggio("io", testo);
     impostaFase("ascolto");
