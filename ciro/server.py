@@ -513,7 +513,32 @@ def pulisci_consumo(dato):
         "saldo": _testo(dato.get("saldo"), 40),
         "nota": _testo(dato.get("nota"), 120),
         "aggiornato": int(time.time()),
+        # issue #6: chi l'ha letto, lo sfondo dell'estensione o una scheda aperta
+        "via": dato.get("via") if dato.get("via") in VIE_CONSUMO else "?",
     }
+
+
+VIE_CONSUMO = ("sfondo", "scheda")
+CONTEGGIO_VIE_OGNI = 3600   # secondi: una riga di riepilogo all'ora nel registro
+_conteggio_vie = {}
+_inizio_conteggio_vie = time.time()
+
+
+def conta_via(consumo, adesso=None):
+    """Issue #6: conta i dati arrivati per account e per via; una volta all'ora
+    scrive il riepilogo nel registro (consumi-vie) e riparte da zero."""
+    global _inizio_conteggio_vie
+    adesso = time.time() if adesso is None else adesso
+    chiave = consumo["fonte"] + "|" + consumo["account"]
+    vie = _conteggio_vie.setdefault(chiave, {})
+    vie[consumo["via"]] = vie.get(consumo["via"], 0) + 1
+    if adesso - _inizio_conteggio_vie < CONTEGGIO_VIE_OGNI:
+        return None
+    riepilogo = {chiave: dict(vie) for chiave, vie in _conteggio_vie.items()}
+    registra("consumi-vie", minuti=round((adesso - _inizio_conteggio_vie) / 60), vie=riepilogo)
+    _conteggio_vie.clear()
+    _inizio_conteggio_vie = adesso
+    return riepilogo
 
 
 def leggi_consumi():
@@ -533,6 +558,7 @@ def salva_consumo(dato):
         temporaneo = FILE_CONSUMI.with_suffix(".tmp")
         temporaneo.write_text(json.dumps(dati, ensure_ascii=False), encoding="utf-8")
         os.replace(temporaneo, FILE_CONSUMI)
+        conta_via(pulito)
 
 
 def consumo_claude_code():

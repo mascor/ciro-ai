@@ -73,5 +73,41 @@ class TestConsumi(unittest.TestCase):
         self.assertEqual(len(server.consumi()), 2)
 
 
+
+class TestVieConsumo(unittest.TestCase):
+    """Issue #6: each reading says who read it; an hourly summary goes to the log."""
+
+    def setUp(self):
+        self.registrati = []
+        self.originali = (server.registra, server._inizio_conteggio_vie)
+        server.registra = lambda tipo, **campi: self.registrati.append((tipo, campi))
+        server._conteggio_vie.clear()
+
+    def tearDown(self):
+        server.registra, server._inizio_conteggio_vie = self.originali
+        server._conteggio_vie.clear()
+
+    def test_via_valida_o_punto_interrogativo(self):
+        self.assertEqual(server.pulisci_consumo({"fonte": "opencode-go", "via": "sfondo"})["via"], "sfondo")
+        self.assertEqual(server.pulisci_consumo({"fonte": "opencode-go", "via": "scheda"})["via"], "scheda")
+        self.assertEqual(server.pulisci_consumo({"fonte": "opencode-go", "via": "altro"})["via"], "?")
+        self.assertEqual(server.pulisci_consumo({"fonte": "opencode-go"})["via"], "?")
+
+    def test_riepilogo_una_volta_all_ora(self):
+        inizio = 1_000_000
+        server._inizio_conteggio_vie = inizio
+        go = server.pulisci_consumo({"fonte": "opencode-go", "account": "abbonamento", "via": "sfondo"})
+        tab = server.pulisci_consumo({"fonte": "opencode-go", "account": "abbonamento", "via": "scheda"})
+        self.assertIsNone(server.conta_via(go, inizio + 60))
+        self.assertIsNone(server.conta_via(tab, inizio + 120))
+        riepilogo = server.conta_via(go, inizio + 3600)
+        self.assertEqual(riepilogo, {"opencode-go|abbonamento": {"sfondo": 2, "scheda": 1}})
+        self.assertEqual([tipo for tipo, _ in self.registrati], ["consumi-vie"])
+        self.assertEqual(self.registrati[0][1]["minuti"], 60)
+        # counting starts again from zero
+        self.assertIsNone(server.conta_via(go, inizio + 3660))
+        self.assertEqual(server._conteggio_vie, {"opencode-go|abbonamento": {"sfondo": 1}})
+
+
 if __name__ == "__main__":
     unittest.main()

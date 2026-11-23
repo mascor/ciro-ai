@@ -7,7 +7,9 @@ importScripts("claude.js", "pagine.js");
 
 const FACCIA = "http://127.0.0.1:8765/api/consumi";
 
-async function mandaAllaFaccia(dato) {
+// via (issue #6): "sfondo" se l'ha letto questo service worker, "scheda" se viene da una scheda aperta
+async function mandaAllaFaccia(dato, via = "sfondo") {
+  dato = { ...dato, via };
   try {
     await fetch(FACCIA, {
       method: "POST",
@@ -55,7 +57,7 @@ async function leggiPagineDaSolo() {
 }
 
 function giro() {
-  leggiClaude(mandaAllaFaccia).catch((errore) =>
+  leggiClaude((dato) => mandaAllaFaccia(dato, "sfondo")).catch((errore) =>
     console.warn("claude.ai dallo sfondo non leggibile (ci pensano le schede aperte)", errore)
   );
   leggiPagineDaSolo().catch((errore) => console.warn("pagine dei consumi", errore));
@@ -75,7 +77,7 @@ chrome.runtime.onMessage.addListener((messaggio) => {
 
 chrome.runtime.onMessage.addListener((messaggio) => {
   if (!messaggio || messaggio.tipo !== "consumo" || !messaggio.dato) return;
-  mandaAllaFaccia(messaggio.dato);
+  mandaAllaFaccia(messaggio.dato, "scheda");
   if (messaggio.dato.fonte === "opencode-go" && /\/go\b/.test(messaggio.indirizzo || "")) {
     chrome.storage.local.set({ indirizzoGo: messaggio.indirizzo });
   }
