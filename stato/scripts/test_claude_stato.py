@@ -162,6 +162,25 @@ class TestEstrazione(unittest.TestCase):
         testo = "Riepilogo.\n- fatto A\n- fatto B\n\nVuoi che continui domani?\n"
         self.assertEqual(cs.estrai_domanda(testo), "Vuoi che continui domani?")
 
+    def test_domanda_con_opzioni_abc(self):
+        testo = ("Non capisco. Cosa intendi?\n"
+                 "- **A** — Manca una sessione.\n"
+                 "- **B** — OpenCode non vede.\n"
+                 "- **C** — Non arrivano quelle web.\n")
+        self.assertEqual(cs.estrai_domanda(testo), "Non capisco. Cosa intendi?")
+
+    def test_domanda_con_opzioni_varie(self):
+        self.assertEqual(cs.estrai_domanda("**Procedo?**\nS = si\nN = no"), "Procedo?")
+        self.assertEqual(cs.estrai_domanda("Quale?\nA) uno\nB) due"), "Quale?")
+        self.assertEqual(cs.estrai_domanda("Quale?\n1. uno\n2. due"), "Quale?")
+
+    def test_elenco_dopo_domanda_non_opzioni(self):
+        testo = "Vuoi continuare?\n- fatto uno\n- fatto due"
+        self.assertEqual(cs.estrai_domanda(testo), "")
+
+    def test_solo_opzioni_senza_domanda(self):
+        self.assertEqual(cs.estrai_domanda("Fatto.\nA) uno\nB) due"), "")
+
     def test_attesa_non_e_domanda(self):
         testo = "Fatto.\n\n\u23f3 **IN ATTESA DI:** Utente, che deve decidere"
         self.assertEqual(cs.estrai_domanda(testo), "")

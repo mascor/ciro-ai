@@ -382,9 +382,19 @@ def estrai_domanda(testo):
         return ""
     righe = [r.strip() for r in testo.splitlines() if r.strip()]
     righe = [r for r in righe if "IN ATTESA DI" not in r]
-    if righe and righe[-1].rstrip().endswith("?"):
-        return senza_markdown_semplice(righe[-1]).strip()
+    # Le opzioni (A/B/C, S/N, 1/2/3) vengono dopo la domanda: si saltano.
+    fine = len(righe)
+    while fine > 0 and OPZIONE_RE.match(righe[fine - 1]):
+        fine -= 1
+    if fine > 0 and righe[fine - 1].rstrip().rstrip("*_ ").endswith("?"):
+        return senza_markdown_semplice(righe[fine - 1]).strip()
     return ""
+
+
+# Riga di un'opzione di scelta: "- **A** — testo", "A) testo", "**S** = si", "1. testo".
+OPZIONE_RE = re.compile(
+    r"^(?:[-*•]\s+)?(?:\*\*|__)?\(?(?:[A-F]|S|N|[1-9])(?:\)|\.|:)?(?:\*\*|__)?"
+    r"\s*(?:—|–|-|:|=|\)|\.)\s*\S")
 
 
 def _mappa_chiusure(testo):
