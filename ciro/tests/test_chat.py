@@ -65,6 +65,19 @@ class TestChat(BaseCiro):
         self.assertTrue(detti[0].startswith("Messaggio undici, da Luca Bianchi:"), detti[0])
         self.assertIn("preventivo", detti[0])
 
+    def test_silenziata_nessun_avviso(self):
+        # notifications turned off in Google Chat: no alert, no model, not in «Ti aspettano» (#63)
+        self.arriva(dict(DIRETTA, silenziata=True))
+        server.giro_avvisi()
+        self.assertEqual(self.coda(), [])
+        self.assertEqual(self.risposte_modello, [])
+        self.assertEqual(self.chat_in_attesa(), [])
+
+    def test_silenziata_non_tocca_le_altre(self):
+        self.arriva(dict(SPAZIO, silenziata=True), DIRETTA)
+        self.assertEqual([v["chat_id"] for v in self.chat_in_attesa()],
+                         ["work@example.com|" + DIRETTA["conversazione"]])
+
     def test_spazio_solo_pannello_senza_modello(self):
         self.arriva(SPAZIO)
         server.giro_avvisi()

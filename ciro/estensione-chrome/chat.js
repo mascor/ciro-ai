@@ -26,6 +26,40 @@ async function accountDellaPagina() {
   return "profilo-" + (utente ? utente[1] : "0");
 }
 
+// notifications turned off in Google Chat (crossed bell): Ciro does not alert for these (#63)
+// only short icon labels are checked, never the message preview (a message saying «muted» stays)
+const SILENZIATA_RE = /^(notifications_off|notifications? (off|muted)|muted|notific\w* disattivat\w*|silenziat\w*)$/i;
+function silenziata(el) {
+  if (el.getAttribute("data-is-muted") === "true" || el.getAttribute("data-muted") === "true") return true;
+  if (el.querySelector('[data-is-muted="true"],[data-muted="true"]')) return true;
+  for (const nodo of el.querySelectorAll("[aria-label],[title],[data-tooltip],i")) {
+    for (const segno of [nodo.getAttribute("aria-label"), nodo.getAttribute("title"),
+                         nodo.getAttribute("data-tooltip"), nodo.tagName === "I" ? nodo.textContent : ""]) {
+      const breve = (segno || "").trim();
+      if (breve && breve.length < 40 && SILENZIATA_RE.test(breve)) return true;
+    }
+  }
+  return false;
+}
+
+// counts only, never text: which attributes the unread items carry, to confirm the muted marker
+let ultimaDiagnosiSilenziate = 0;
+function diagnosiSilenziate(elenco) {
+  const attributi = {};
+  let silenziate = 0, nonLette = 0;
+  for (const el of elenco) {
+    if (el.getAttribute("data-is-unread") !== "true") continue;
+    nonLette++;
+    if (silenziata(el)) silenziate++;
+    for (const nodo of [el, ...el.querySelectorAll("*")]) {
+      for (const nome of nodo.getAttributeNames()) {
+        if (nome.startsWith("data-") || nome === "aria-label") attributi[nome] = (attributi[nome] || 0) + 1;
+      }
+    }
+  }
+  return { tipo: "silenziate", non_lette: nonLette, silenziate, attributi };
+}
+
 function nonLetti() {
   const elenco = document.querySelectorAll('span[role="listitem"][data-group-id]');
   if (!elenco.length) return null;   // not the Chat app (or not loaded yet): send nothing
@@ -34,6 +68,7 @@ function nonLetti() {
     if (el.getAttribute("data-is-unread") !== "true") continue;
     conversazioni.push({
       conversazione: el.getAttribute("data-group-id"),
+      silenziata: silenziata(el),
       righe: (el.innerText || "").split("\n").map((r) => r.trim()).filter(Boolean).slice(0, 12),
     });
   }
@@ -68,8 +103,12 @@ async function manda() {
       dato: { account: await accountDellaPagina(), conversazioni: null, diagnosi: diagnosi() } }).catch(() => {});
     return;
   }
-  chrome.runtime.sendMessage({ tipo: "chat-non-letti", dato: { account: await accountDellaPagina(), conversazioni } })
-    .catch(() => {});
+  const dato = { account: await accountDellaPagina(), conversazioni };
+  if (conversazioni.length && Date.now() - ultimaDiagnosiSilenziate > 600000) {   // every 10 minutes
+    ultimaDiagnosiSilenziate = Date.now();
+    dato.diagnosi_silenziate = diagnosiSilenziate(document.querySelectorAll('span[role="listitem"][data-group-id]'));
+  }
+  chrome.runtime.sendMessage({ tipo: "chat-non-letti", dato }).catch(() => {});
 }
 
 // every Chat page and frame, also Chat inside Gmail

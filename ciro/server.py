@@ -980,7 +980,12 @@ def ricevi_chat(dato, in_sottofondo=True):
         except (OSError, ValueError):
             pass
         return
-    nuove = _chat.aggiorna(dato.get("account"), dato.get("conversazioni") or [])
+    if dato.get("diagnosi_silenziate"):   # solo conteggi e nomi di attributi, mai testi (#63)
+        registra("chat-diagnosi-silenziate", **{k: v for k, v in dato["diagnosi_silenziate"].items() if k != "tipo"})
+    tutte = dato.get("conversazioni") or []
+    # notifiche disattivate in Google Chat: niente avvisi ne' «Ti aspettano» (#63)
+    conversazioni = [c for c in tutte if not (isinstance(c, dict) and c.get("silenziata"))]
+    nuove = _chat.aggiorna(dato.get("account"), conversazioni)
     if not nuove or not modulo_cervello.leggi_impostazioni().get("chat_al_modello", True):
         return   # impostazione spenta: nessun messaggio al modello, restano nel pannello
     if in_sottofondo:
