@@ -142,6 +142,7 @@ EN = {
     "Messaggio %s, ": "Message %s, ",
     "Ti ricordo il messaggio %s, da %s: %s.": "Reminder: message %s, from %s: %s.",
     "Va bene.": "OK.",
+    "Va bene, non ti avviso più per questa chat.": "OK, no more alerts for this chat.",
     # numbered questions
     "Domanda %s, ": "Question %s, ",
     "Quale domanda? %s.": "Which question? %s.",

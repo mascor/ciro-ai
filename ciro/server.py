@@ -71,6 +71,7 @@ _coda = []            # messaggi da far dire alla faccia
 _coda_lock = threading.Lock()
 _cervello = modulo_cervello.Cervello()
 _cervello.chiudi_chat = lambda chiave: _chat.chiudi(chiave)
+_cervello.ignora_chat = lambda chiave: _chat.ignora(chiave)
 _cervello.nascondi = lambda chiave: nascondi(chiave)
 _cervello.riassunto_perso = lambda dal: frase_perso(dal)
 _cervello_lock = threading.Lock()
@@ -980,12 +981,7 @@ def ricevi_chat(dato, in_sottofondo=True):
         except (OSError, ValueError):
             pass
         return
-    if dato.get("diagnosi_silenziate"):   # solo conteggi e nomi di attributi, mai testi (#63)
-        registra("chat-diagnosi-silenziate", **{k: v for k, v in dato["diagnosi_silenziate"].items() if k != "tipo"})
-    tutte = dato.get("conversazioni") or []
-    # notifiche disattivate in Google Chat: niente avvisi ne' «Ti aspettano» (#63)
-    conversazioni = [c for c in tutte if not (isinstance(c, dict) and c.get("silenziata"))]
-    nuove = _chat.aggiorna(dato.get("account"), conversazioni)
+    nuove = _chat.aggiorna(dato.get("account"), dato.get("conversazioni") or [])
     if not nuove or not modulo_cervello.leggi_impostazioni().get("chat_al_modello", True):
         return   # impostazione spenta: nessun messaggio al modello, restano nel pannello
     if in_sottofondo:
