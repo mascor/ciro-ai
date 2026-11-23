@@ -83,9 +83,35 @@ chrome.runtime.onMessage.addListener((messaggio) => {
   }
 });
 
-chrome.alarms.create("claude", { periodInMinutes: 5 });
-chrome.alarms.onAlarm.addListener((allarme) => {
-  if (allarme.name === "claude") giro();
+// issue #56: se nella cartella c'e' una versione nuova dell'estensione, mi ricarico da solo
+const CIRO_ESTENSIONE = "http://127.0.0.1:8765/api/estensione";
+async function aggiornaSeServe() {
+  try {
+    const risposta = await fetch(CIRO_ESTENSIONE);
+    if (!risposta.ok) return;
+    const { versione } = await risposta.json();
+    if (!versione || versione === chrome.runtime.getManifest().version) return;
+    // un solo tentativo per versione: se l'estensione e' caricata da un'altra
+    // cartella, ricaricarla non cambia niente e non deve ricaricarsi all'infinito
+    const { ricaricataPer } = await chrome.storage.local.get("ricaricataPer");
+    if (ricaricataPer === versione) return;
+    await chrome.storage.local.set({ ricaricataPer: versione });
+    console.info("Ciro Agente: nuova versione", versione, "- mi ricarico");
+    chrome.runtime.reload();
+  } catch (errore) {
+    console.warn("Ciro non raggiungibile (versione)", errore);
+  }
+}
+
+// issue #55: il service worker riparte a ogni messaggio delle schede; ricreare
+// l'allarme ogni volta ne faceva ripartire il conto e la lettura non arrivava mai
+chrome.alarms.get("claude", (allarme) => {
+  if (!allarme) chrome.alarms.create("claude", { periodInMinutes: 5 });
 });
-chrome.runtime.onStartup.addListener(giro);
+chrome.alarms.onAlarm.addListener((allarme) => {
+  if (allarme.name !== "claude") return;
+  giro();
+  aggiornaSeServe();
+});
+chrome.runtime.onStartup.addListener(() => { giro(); aggiornaSeServe(); });
 chrome.runtime.onInstalled.addListener(giro);

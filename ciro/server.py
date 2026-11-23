@@ -518,6 +518,17 @@ def pulisci_consumo(dato):
     }
 
 
+def versione_estensione():
+    """Issue #56: la versione dell'estensione Chrome nella cartella; l'estensione
+    si ricarica da sola quando e' diversa dalla sua. None se il manifest non si legge."""
+    try:
+        dato = json.loads((CARTELLA / "estensione-chrome" / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    versione = dato.get("version") if isinstance(dato, dict) else None
+    return versione if isinstance(versione, str) and re.fullmatch(r"\d+(\.\d+){0,3}", versione) else None
+
+
 VIE_CONSUMO = ("sfondo", "scheda")
 CONTEGGIO_VIE_OGNI = 3600   # secondi: una riga di riepilogo all'ora nel registro
 _conteggio_vie = {}
@@ -1847,7 +1858,7 @@ class Gestore(BaseHTTPRequestHandler):
             return False
         origine = self.headers.get("Origin")
         if origine and origine.startswith("chrome-extension://"):
-            return percorso == "/api/consumi" or percorso.startswith("/api/chat/")
+            return percorso in ("/api/consumi", "/api/estensione") or percorso.startswith("/api/chat/")
         if origine and urlparse(origine).hostname not in ("127.0.0.1", "localhost"):
             return False
         sito = self.headers.get("Sec-Fetch-Site")
@@ -1877,6 +1888,8 @@ class Gestore(BaseHTTPRequestHandler):
             self._invia(200, json.dumps({"messaggi": messaggi, "muto": False}))
         elif percorso == "/api/versione":
             self._invia(200, json.dumps({"versione": versione()}))
+        elif percorso == "/api/estensione":
+            self._invia(200, json.dumps({"versione": versione_estensione()}))
         elif percorso == "/api/stato":
             self._invia(200, json.dumps({"ok": True, "voce": VOCE,
                                          "whisper": MODELLO_WHISPER.exists()}))
