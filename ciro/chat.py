@@ -85,6 +85,7 @@ class Chat:
         dati.setdefault("account", {})
         dati.setdefault("chiuse", {})
         dati.setdefault("letture", {})     # account -> {"ok": bool, "dal": first failure}
+        dati.setdefault("ignorate", {})    # account|conversation -> name: never alert (#63)
         return dati
 
     def _scrivi(self, dati):
@@ -109,6 +110,8 @@ class Chat:
                 if not ident:
                     continue
                 chiave = account + "|" + ident
+                if chiave in dati["ignorate"]:
+                    continue   # the user said «ignora»: no alert, not in the panel
                 presenti.add(chiave)
                 nome, testo = estrai(conv.get("righe"))
                 if dati["chiuse"].get(chiave) == testo:
@@ -184,6 +187,30 @@ class Chat:
             dati["chiuse"][chiave] = voce.get("testo")
             self._scrivi(dati)
             return True
+
+    def ignora(self, chiave, nome=None):
+        """«ignora il tre»: that conversation never alerts again (Google Chat does not show
+        in the page which conversations are muted, so Ciro keeps its own list, #63)."""
+        with self._lock:
+            dati = self._leggi()
+            voce = dati["conversazioni"].pop(chiave, None)
+            if voce is None and nome is None:
+                return False
+            dati["ignorate"][chiave] = nome or voce.get("nome") or ""
+            dati["chiuse"].pop(chiave, None)
+            self._scrivi(dati)
+            return True
+
+    def riattiva(self, chiave):
+        with self._lock:
+            dati = self._leggi()
+            if dati["ignorate"].pop(chiave, None) is None:
+                return False
+            self._scrivi(dati)
+            return True
+
+    def ignorate(self):
+        return dict(self._leggi()["ignorate"])
 
     def silenziosi(self, adesso=None):
         """{account: secondi di silenzio} per i profili che mandavano l'elenco e tacciono da piu' di

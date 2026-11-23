@@ -71,6 +71,7 @@ _coda = []            # messaggi da far dire alla faccia
 _coda_lock = threading.Lock()
 _cervello = modulo_cervello.Cervello()
 _cervello.chiudi_chat = lambda chiave: _chat.chiudi(chiave)
+_cervello.ignora_chat = lambda chiave: _chat.ignora(chiave)
 _cervello.nascondi = lambda chiave: nascondi(chiave)
 _cervello.riassunto_perso = lambda dal: frase_perso(dal)
 _cervello_lock = threading.Lock()

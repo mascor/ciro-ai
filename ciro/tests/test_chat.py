@@ -50,6 +50,7 @@ class TestChat(BaseCiro):
         server._ultimo_avviso.clear()
         server._promemoria_chat.clear()
         server._cervello.chiudi_chat = self.chat.chiudi
+        server._cervello.ignora_chat = self.chat.ignora
 
     def arriva(self, *conversazioni, account="work@example.com"):
         server.ricevi_chat({"account": account, "conversazioni": list(conversazioni)}, in_sottofondo=False)
@@ -64,6 +65,37 @@ class TestChat(BaseCiro):
         self.assertEqual(len(detti), 1, detti)
         self.assertTrue(detti[0].startswith("Messaggio undici, da Luca Bianchi:"), detti[0])
         self.assertIn("preventivo", detti[0])
+
+    def test_ignorata_nessun_avviso(self):
+        # Google Chat does not show muted conversations: Ciro keeps its own list (#63)
+        self.chat.ignora("work@example.com|dm/AAA", nome="Luca Bianchi")
+        self.arriva(DIRETTA, SPAZIO)
+        server.giro_avvisi()
+        self.assertEqual(self.coda(), [])
+        self.assertEqual(self.risposte_modello, [])
+        self.assertEqual([v["chat_id"] for v in self.chat_in_attesa()], ["work@example.com|space/BBB"])
+
+    def test_ignorata_vale_anche_con_testo_nuovo(self):
+        self.arriva(DIRETTA)
+        self.assertTrue(self.chat.ignora("work@example.com|dm/AAA"))
+        self.assertEqual(self.chat_in_attesa(), [])
+        self.arriva(conversazione("dm/AAA", ["Luca Bianchi", "17:00", "Unread", "Altro messaggio"]))
+        self.assertEqual(self.chat_in_attesa(), [])
+        self.assertEqual(self.chat.ignorate(), {"work@example.com|dm/AAA": "Luca Bianchi"})
+
+    def test_riattiva(self):
+        self.chat.ignora("work@example.com|dm/AAA", nome="Luca")
+        self.assertTrue(self.chat.riattiva("work@example.com|dm/AAA"))
+        self.arriva(DIRETTA)
+        self.assertEqual(len(self.chat_in_attesa()), 1)
+
+    def test_ignora_a_voce(self):
+        self.arriva(DIRETTA)
+        server.attese()                                  # numbers assigned
+        esito = server._cervello.chiedi("ignora l'undici")
+        self.assertEqual(esito["risposta"], "Va bene, non ti avviso più per questa chat.")
+        self.assertIn("work@example.com|dm/AAA", self.chat.ignorate())
+        self.assertEqual(self.chat_in_attesa(), [])
 
     def test_spazio_solo_pannello_senza_modello(self):
         self.arriva(SPAZIO)

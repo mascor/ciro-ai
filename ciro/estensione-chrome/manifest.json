@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ciro Agente",
-  "version": "1.9",
+  "version": "1.12",
   "description": "Gli occhi di Ciro nel browser: legge i consumi di Claude, OpenCode Go e DeepSeek e i messaggi non letti di Google Chat dalle pagine in cui sei gia' collegato, e li manda a Ciro sul Mac (127.0.0.1).",
   "permissions": [
     "alarms",

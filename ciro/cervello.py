@@ -643,6 +643,7 @@ class Cervello:
         self.sentito_per_risposta = {}  # ID -> cosa aveva capito whisper (per imparare dalle correzioni)
         self.da_imparare = None        # {sentito, giusta}: il server salva quell'audio nel banco di prova
         self.chiudi_chat = None       # il server collega la chiusura di un messaggio di Chat
+        self.ignora_chat = None       # e l'elenco delle chat da non avvisare piu' (#63)
         self.nascondi = None          # il server collega «chiudi cinque» (toglie una voce dal pannello)
         self.riassunto_perso = None   # il server collega «cosa mi sono perso» (dal -> frase)
         self.ultimo_utente_t = None   # l'ultima volta che l'utente ha detto qualcosa
@@ -977,6 +978,15 @@ class Cervello:
             if voce and str(voce.get("chiave", "")).startswith("chat|") and self.chiudi_chat:
                 self.chiudi_chat(voce["chiave"][len("chat|"):])
                 return self._detto(testo, t("Va bene."), False)
+        # «ignora l'undici», «silenzia l'undici»: quella chat non avvisa piu' (#63)
+        if len(parole) >= 2 and parole[0] in ("ignora", "silenzia", "ignore", "mute"):
+            resto = [re.sub(r"^l'", "", p) for p in parole[1:] if p not in ("il", "la", "lo", "chat", "messaggio",
+                                                                             "the", "message")]
+            numero = modulo_numeri.DETTI.get(resto[0]) if len(resto) == 1 else None
+            voce = self.numeri.cerca(numero) if numero else None
+            if voce and str(voce.get("chiave", "")).startswith("chat|") and self.ignora_chat:
+                self.ignora_chat(voce["chiave"][len("chat|"):])
+                return self._detto(testo, t("Va bene, non ti avviso più per questa chat."), False)
         # «chiudi cinque», «close five»: la voce sparisce dal pannello (non risponde alla sessione)
         if len(parole) >= 2 and parole[0] in ("chiudi", "chiudere", "nascondi", "togli", "close", "hide", "dismiss"):
             resto = [re.sub(r"^l'", "", p) for p in parole[1:] if p not in ("il", "la", "lo", "domanda", "numero",
