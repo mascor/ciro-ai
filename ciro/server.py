@@ -727,7 +727,38 @@ SENZA_SESSIONE_MAX = 2 * 3600
 # ------------------------------------------- avvisi dal calendario (M6)
 # Eventi rossi dei prossimi 35 minuti: letti ogni 60 s in sottofondo (mai dentro attese(),
 # che gira ogni 8 s e non deve aspettare la rete). Senza account collegati non legge niente.
-_calendario = modulo_calendario.Lettore(modulo_calendario.scarica_google)
+# due fonti: la scheda di Google Calendar aperta (estensione, #70) e, se collegato, l'accesso Google (#69)
+_fonte_pagina = modulo_calendario.FonteEstensione()
+_diagnosi_calendario = {}   # account -> ultima volta registrata (una riga ogni 10 minuti)
+
+
+def _account_calendario():
+    account = modulo_calendario.leggi_configurazione()
+    account.update(_fonte_pagina.account())
+    return account
+
+
+def _scarica_calendario(account, calendario, time_min, time_max):
+    if calendario == modulo_calendario.PAGINA:
+        return _fonte_pagina.scarica(account, calendario, time_min, time_max)
+    return modulo_calendario.scarica_google(account, calendario, time_min, time_max)
+
+
+def ricevi_calendario(dato, adesso=None):
+    """Gli eventi della scheda del calendario: nel registro solo i conteggi, mai i titoli."""
+    adesso = time.time() if adesso is None else adesso
+    account = str((dato or {}).get("account") or "?")
+    conteggi = _fonte_pagina.ricevi(account, (dato or {}).get("eventi"), adesso)
+    prova = "colore_prova_ciro" in conteggi and account + "|prova" not in _diagnosi_calendario
+    if prova:
+        _diagnosi_calendario[account + "|prova"] = adesso
+    if prova or adesso - _diagnosi_calendario.get(account, 0) > 600:
+        _diagnosi_calendario[account] = adesso
+        registra("calendario-pagina", account=account.split("@")[0][:3] + "…", **conteggi)
+    return conteggi
+
+
+_calendario = modulo_calendario.Lettore(_scarica_calendario, _account_calendario)
 _eventi_calendario = []
 _calendario_non_aggiornati = []
 
@@ -786,7 +817,7 @@ def conferma_calendario(chiave=None, adesso=None):
     except OSError:
         pass
     _promemoria_calendario.pop(chiave, None)
-    registra("calendario-confermato", evento=chiave.split("|")[0] + "|…")
+    registra("calendario-confermato", evento=chiave.split("|")[0][:3] + "…")
     return True
 
 
@@ -818,7 +849,7 @@ def giro_calendario_voce(voci, adesso=None):
         _promemoria_calendario[chiave] = adesso
         _in_coda({"testo": frase, "da": "calendario", "progetto": "calendario", "quando": adesso})
         _cervello.annota_avviso("calendario", frase, domanda=False)
-        registra("calendario-avviso", evento=chiave.split("|")[0] + "|…", ripetuto=ultima is not None)
+        registra("calendario-avviso", evento=chiave.split("|")[0][:3] + "…", ripetuto=ultima is not None)
 
 
 def voci_calendario(adesso=None):
@@ -1995,7 +2026,8 @@ class Gestore(BaseHTTPRequestHandler):
             return False
         origine = self.headers.get("Origin")
         if origine and origine.startswith("chrome-extension://"):
-            return percorso in ("/api/consumi", "/api/estensione") or percorso.startswith("/api/chat/")
+            return percorso in ("/api/consumi", "/api/estensione", "/api/calendario/eventi") \
+                or percorso.startswith("/api/chat/")
         if origine and urlparse(origine).hostname not in ("127.0.0.1", "localhost"):
             return False
         sito = self.headers.get("Sec-Fetch-Site")
@@ -2154,6 +2186,8 @@ class Gestore(BaseHTTPRequestHandler):
                     modulo_cervello.imposta("lingua", dato["lingua"])
                     registra("lingua", lingua=dato["lingua"])
                 self._invia(200, json.dumps({"lingua": lingua()}))
+            elif percorso == "/api/calendario/eventi":
+                self._invia(200, json.dumps(ricevi_calendario(json.loads(corpo or b"{}"))))
             elif percorso == "/api/calendario/conferma":
                 chiave = str(json.loads(corpo or b"{}").get("chiave") or "")
                 self._invia(200, json.dumps({"confermato": bool(chiave) and conferma_calendario(chiave)}))
