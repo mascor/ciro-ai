@@ -53,9 +53,11 @@ class TestVarianti(BaseCiro):
     def setUp(self):
         super().setUp()
         server._tentativi_nome.clear()
+        modulo_nome._sentite_una_volta.clear()
 
     def test_variante_imparata(self):
         self.assertFalse(server.togli_nome("quacca")[0])
+        self.assertFalse(modulo_nome.impara_variante("quacca"))     # far from «Ciro»: once is not enough
         self.assertTrue(modulo_nome.impara_variante("quacca"))
         self.assertEqual(server.togli_nome("quacca"), (True, ""))
         self.assertEqual(server.togli_nome("Quacca, come stanno le sessioni?"), (True, "come stanno le sessioni?"))
@@ -66,9 +68,24 @@ class TestVarianti(BaseCiro):
 
     def test_impara_dall_uso(self):
         t0 = time.time()
-        server.nota_ascolto_nome("quacca", False, t0)
-        self.assertEqual(server.nota_ascolto_nome("ehi, giro", True, t0 + 5), ["quacca"])
+        server.nota_ascolto_nome("quacca", False, t0 + 20)
+        self.assertEqual(server.nota_ascolto_nome("ehi, giro", True, t0 + 25), [])
+        server.nota_ascolto_nome("quacca", False, t0 + 30)
+        self.assertEqual(server.nota_ascolto_nome("ehi, giro", True, t0 + 35), ["quacca"])
         self.assertEqual(server.togli_nome("quacca"), (True, ""))
+
+    def test_lontano_dal_nome_non_imparato_subito(self):
+        # #39: in the calibration «A e Q» was saved as a way of saying the name
+        self.assertTrue(modulo_nome.somiglia_al_nome(modulo_nome.compatta("Ehi Siro")))
+        self.assertFalse(modulo_nome.somiglia_al_nome(modulo_nome.compatta("A e Q")))
+        self.assertFalse(modulo_nome.impara_variante("A e Q"))
+        self.assertFalse(server.togli_nome("A e Q")[0])
+        self.assertTrue(modulo_nome.impara_variante("Ehi Siro"))
+
+    def test_varianti_gia_imparate_restano(self):
+        modulo_nome.cervello.aggiorna_profilo(nomi_sentiti=["quacca"])
+        self.assertEqual(server.togli_nome("quacca"), (True, ""))
+        self.assertTrue(modulo_nome.impara_variante("quacca"))
 
     def test_troppo_tardi_non_impara(self):
         t0 = time.time()
