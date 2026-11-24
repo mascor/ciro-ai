@@ -16,6 +16,8 @@ import sys
 import tempfile
 import threading
 import time
+import atexit
+import signal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -28,6 +30,7 @@ import chat as modulo_chat
 import nome as modulo_nome
 import numeri as numeri_parlati
 import testi as modulo_testi  # noqa: E402
+import whisper_caricato  # noqa: E402
 
 # domande strutturate: registro, coordinatore e posta (stessa cartella di posta.py)
 sys.path.insert(0, str(modulo_cervello.POSTA_SCRIPT.parent))
@@ -393,15 +396,48 @@ def trascrivi_hex(percorso):
     return testo
 
 
+def opzioni_vad():
+    # VAD tarato sulla voce vera: con i valori predefiniti una «A» detta da sola
+    # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
+    return ["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"] if MODELLO_VAD.is_file() else []
+
+
+# i modelli tenuti caricati (#77), per percorso del modello: vuoto finche' avvia() non li accende
+_whisper_caricati = {}
+
+
+def accendi_whisper_caricati():
+    """In background all'avvio: un whisper-server per il modello rapido e uno per il turbo,
+    con il VAD (le passate senza VAD restano a whisper-cli). CIRO_WHISPER_CARICATO=0 lo spegne."""
+    if os.environ.get("CIRO_WHISPER_CARICATO") == "0" or not opzioni_vad():
+        return
+    whisper_caricato.ferma_vecchi()
+    for tipo, modello in (("rapido", modello_rapido()), ("preciso", MODELLO_WHISPER)):
+        if str(modello) not in _whisper_caricati:
+            caricato = whisper_caricato.ServerWhisper(tipo, modello, lingua_whisper, opzioni_vad(), registra)
+            _whisper_caricati[str(modello)] = caricato
+            caricato.avvia()
+
+
+def spegni_whisper_caricati():
+    for caricato in list(_whisper_caricati.values()):
+        caricato.ferma()
+
+
 def trascrivi_whisper(percorso, durata, grande=False):
-    """whisper.cpp: il modello rapido per l'audio breve, il turbo per il resto."""
+    """whisper.cpp: il modello rapido per l'audio breve, il turbo per il resto.
+    Con il VAD prima il modello gia' caricato (#77); se non risponde, whisper-cli come sempre."""
     testo = ""
     for modello, con_vad in passate_whisper(durata, grande=grande):
-        # VAD tarato sulla voce vera: con i valori predefiniti una «A» detta da sola
-        # (sotto 250 ms) veniva scartata; 80 ms e 200 ms di margine la tengono
-        vad = (["--vad", "-vm", str(MODELLO_VAD), "-vspd", "80", "-vp", "200"]
-               if con_vad and MODELLO_VAD.is_file() else [])
+        vad = opzioni_vad() if con_vad else []
         percorso_modello = modello_rapido() if modello == "rapido" else MODELLO_WHISPER
+        caricato = _whisper_caricati.get(str(percorso_modello)) if vad else None
+        sentito = caricato.trascrivi(percorso) if caricato else None
+        if sentito is not None:
+            testo = pulisci_trascrizione(sentito)
+            if testo:
+                break
+            continue
         esito = subprocess.run([WHISPER, "-m", str(percorso_modello), "-l", lingua_whisper(),
                                 "-nt", "-np", *vad, "-f", str(percorso)],
                                capture_output=True, text=True, timeout=180)
@@ -2251,6 +2287,9 @@ def avvia(porta):
     threading.Thread(target=sorveglia_attese, daemon=True).start()
     threading.Thread(target=sorveglia_domande, daemon=True).start()
     threading.Thread(target=sorveglia_calendario, daemon=True).start()
+    threading.Thread(target=accendi_whisper_caricati, daemon=True).start()
+    atexit.register(spegni_whisper_caricati)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # «ciro riavvia»: spegne anche i whisper-server
     server.serve_forever()
 
 
