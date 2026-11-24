@@ -248,6 +248,8 @@ The first answer takes a few seconds while the voice and speech models load; aft
 - **Usage panel**: load `ciro/estensione-chrome/` in every Chrome profile
   (`chrome://extensions` → Developer mode → Load unpacked), and set
   `ciro/barra-stato.py` as the Claude Code `statusLine` in `~/.claude/settings.json`.
+  The claude.ai usage is read in the background every few minutes, so its usage page does not
+  need to stay open; the OpenCode Go and DeepSeek readings still come from their open tab.
 - **Account names**: `~/.config/faccia/nomi-account.json` maps an email to a short name,
   e.g. `{"me@example.com": "Personal"}`.
 
