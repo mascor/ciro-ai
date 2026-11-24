@@ -143,7 +143,8 @@ The repository has three parts:
 
 ### 1. Requirements
 
-- macOS on Apple Silicon (tested on macOS 26), a microphone, Google Chrome.
+- macOS on Apple Silicon (tested on macOS 26, also on a fresh user account following the steps
+  below), a microphone, Google Chrome.
 - [Homebrew](https://brew.sh), Python 3.9+ (`/usr/bin/python3` is fine for the mailbox).
 - [Claude Code](https://claude.com/claude-code) for the sessions you want to coordinate.
 - [OpenCode](https://opencode.ai) with a DeepSeek provider (direct API or OpenCode Go).
