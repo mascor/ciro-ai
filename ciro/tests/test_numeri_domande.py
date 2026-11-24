@@ -72,6 +72,15 @@ class TestNumeriDomande(BaseCiro):
         self.assertTrue(esito["mandato"], esito)
         self.assertEqual(domande.leggi(seconda)["risposta"]["scelta"], "B")
 
+    def test_due_scritto_in_inglese(self):
+        # #40: the fast whisper model wrote «due» as «Do we?»
+        self.apri("ironworks")
+        self.apri("contoso")
+        server._cervello.ultimo_detto = {"tipo": "avviso", "id": "altro", "ora": 0}
+        esito = server._cervello.chiedi("Do we?")
+        self.assertIn("Quale domanda?", esito["risposta"])
+        self.assertIn("la due, contoso", esito["risposta"])
+
     def test_domanda_tre_la_ridice(self):
         self.apri("ironworks")
         self.apri("contoso")

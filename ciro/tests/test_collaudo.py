@@ -37,6 +37,18 @@ class BaseCollaudo(BaseCiro):
 
 
 class TestCalibrazione(BaseCollaudo):
+    def test_due_scritto_in_inglese(self):
+        # #40: the fast whisper model wrote «due» as «Do we?» / «Do where?»
+        self.c.avvia("calibrazione")
+        self.c.silenzio(0.002, 0.003, 0.01)
+        self.c.gestisci("uno", 0.05)
+        self.c.gestisci("Do we?", 0.05)
+        self.assertTrue(self.c.frasi_sentite[-1]["ok"])
+        self.assertTrue(self.c._uguale("due", "Do where?"))
+        self.assertFalse(self.c._uguale("tre", "Do we?"))
+        self.assertEqual(modulo_cervello.sentito_come("do where"), "due")
+        self.assertEqual(modulo_cervello.sentito_come("dove"), "dove")     # a real word: left alone
+
     def test_avvio_pausa_e_silenzio(self):
         frase = self.c.avvia("calibrazione")
         self.assertIn("silenzio", frase.lower())

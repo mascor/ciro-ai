@@ -24,6 +24,11 @@ class BaseInglese(BaseCiro):
 
 
 class TestInglese(BaseInglese):
+    def test_do_we_resta_inglese(self):
+        # #40: «do we» -> «due» only in Italian
+        self.assertEqual(modulo_cervello.sentito_come("do we"), "do we")
+        self.assertEqual(modulo_cervello.sentito_come("ah"), "a")
+
     def test_domanda_detta_in_inglese(self):
         self.annunciata(opzioni={"A": "proceed", "B": "stop"})
         frase = self.coda()[-1]["testo"]
