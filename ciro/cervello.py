@@ -449,6 +449,18 @@ def numeri_in_lettere(detto):
 # come whisper scrive a volte una lettera detta da sola
 LETTERE_SENTITE = {"ah": "a", "ahh": "a", "aah": "a", "ha": "a", "à": "a",
                    "bi": "b", "be": "b", "bè": "b", "ci": "c"}
+# Italian short answers the fast whisper model writes in English even with «-l it»: «due» said
+# alone became «Do we?» / «Do where?» (#40, MacBook Pro microphone; the large model gets «due»)
+NUMERI_SENTITI_IT = {"do we": "due", "do where": "due", "duwe": "due"}
+
+
+def sentito_come(detto):
+    """A short answer as whisper often mishears it -> what was said («ah» -> «a», «do we» -> «due»)."""
+    if detto in LETTERE_SENTITE:
+        return LETTERE_SENTITE[detto]
+    if lingua() == "it":
+        return NUMERI_SENTITI_IT.get(detto, detto)
+    return detto
 CORREZIONE_RE = re.compile(r"^(?:rispondi|cambia(?:\s+in)?|correggi(?:\s+in)?|answer|change(?:\s+it)?\s+to|"
                            r"correct(?:\s+it)?\s+to)\s+(?:la\s+|the\s+)?([a-z])$")
 CORREZIONE_SECONDI = 120
@@ -842,7 +854,7 @@ class Cervello:
         Ciro chiede «Per quale progetto?» invece di indovinare."""
         detto = re.sub(r"[^\w'àèéìòù]+", " ", (testo or "").lower()).strip()
         appresi = leggi_impostazioni().get("alias_lettere") or {}   # dalla calibrazione
-        detto = appresi.get(detto) or LETTERE_SENTITE.get(detto, detto)
+        detto = appresi.get(detto) or sentito_come(detto)
         if not detto:
             return None
         detto_parole = detto

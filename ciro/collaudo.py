@@ -199,6 +199,7 @@ class Collaudo:
             import nome as modulo_nome
             return modulo_nome.togli_nome(sentita) == (True, "") or modulo_nome.impara_variante(sentita)
         a, s = normalizza(attesa), normalizza(sentita)
+        s = normalizza(modulo_cervello.sentito_come(s))     # «Do we?» for «due» (#40)
         if a == s:
             return True
         if attesa == self.frasi[-1]:   # frase lunga: basta la maggior parte delle parole
