@@ -5,6 +5,7 @@ mangles the name («e il giro», «ehi, tiro!», «quacca»), so a call is recog
 - by the name (and its usual misspellings) at the start of the sentence;
 - by the variants learned for THIS voice: in the calibration («Ehi Ciro» three
   times) and in use (a failed try followed within 10 s by a recognised call);
+  a form far from «Ciro» is learned only when it comes back a second time (#39);
 - for a short sentence alone, by sounding like «Ehi Ciro» (edit distance).
 """
 
@@ -35,6 +36,14 @@ def _distanza(a, b):
     return riga[-1]
 
 
+_sentite_una_volta = set()   # far-off forms heard once, waiting for a second time
+
+
+def somiglia_al_nome(forma):
+    """Close to a call: at most half the letters of «ciro» / «ehi ciro» changed."""
+    return any(_distanza(forma, c) <= len(c) // 2 for c in CHIAMATE)
+
+
 def varianti():
     return list(cervello.profilo_voce().get("nomi_sentiti") or [])
 
@@ -47,6 +56,12 @@ def impara_variante(testo):
         return False
     if togli_nome(testo) == (True, ""):
         return True           # already recognised
+    if not somiglia_al_nome(forma):
+        # far from «Ciro» («A e Q», #39): learned only when the same form comes back a second time
+        if forma not in _sentite_una_volta:
+            _sentite_una_volta.add(forma)
+            return False
+        _sentite_una_volta.discard(forma)
     tutte = [v for v in varianti() if v != forma] + [forma]
     cervello.aggiorna_profilo(nomi_sentiti=tutte[-MAX_VARIANTI:])
     return True

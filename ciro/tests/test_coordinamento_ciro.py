@@ -30,6 +30,7 @@ coordinatore = server.coordinatore
 class BaseCiro(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="ciro-test-"))
+        server.modulo_nome._sentite_una_volta.clear()   # name forms heard once (#39): none between tests
         self.env = {k: os.environ.get(k) for k in ("POSTA_RADICE", "CIRO_AUTORIZZAZIONI",
                                                    "POSTA_REGISTRO", "CIRO_DEEPSEEK_DIRETTO")}
         os.environ["POSTA_RADICE"] = str(self.tmp / "posta")

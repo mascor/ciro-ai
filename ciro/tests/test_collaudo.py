@@ -78,7 +78,8 @@ class TestCalibrazione(BaseCollaudo):
     def test_fine_soglia_da_rumore_e_voce(self):
         self.c.avvia("calibrazione")
         self.c.silenzio(0.002, 0.004, 0.01)
-        for detta in ("uno", "Due", "si", "No.", "Ehi Ciro.", "ehi, giro", "quacca", "uno per prova 2", "Come stanno le sessioni oggi?"):
+        # «quacca» is far from «Ciro»: accepted as the name only the second time (#39)
+        for detta in ("uno", "Due", "si", "No.", "Ehi Ciro.", "ehi, giro", "quacca", "quacca", "uno per prova 2", "Come stanno le sessioni oggi?"):
             self.c.gestisci(detta, 0.08)
         self.assertEqual(self.c.fase, "fine")
         self.assertTrue(self.detti[-1].startswith("Calibrazione finita"), self.detti)
@@ -288,6 +289,8 @@ class TestNomeNellaCalibrazione(BaseCollaudo):
             self.c.gestisci(detta, 0.05)
         self.assertEqual(self.c.stato_guida()["dire"], "ehi ciro")
         self.c.gestisci("quacca", 0.05)        # how whisper wrote «Ehi Ciro» for this voice
+        self.assertEqual(self.c.stato_guida()["ultima"]["ok"], False)   # far from «Ciro»: asked again (#39)
+        self.c.gestisci("quacca", 0.05)        # the same form a second time: now it is learned
         self.assertTrue(self.c.frasi_sentite[-1]["ok"])
         self.assertEqual(modulo_nome.togli_nome("quacca"), (True, ""))
         self.c.gestisci("e", 0.05)             # a breath: nothing learned, asked again
